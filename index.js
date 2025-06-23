@@ -26,12 +26,12 @@
                         <div class="copybot_input_row">
                             <div class="copybot_input_group">
                                 <label for="copybot_start">시작위치:</label>
-                                <input type="number" id="copybot_start" value="1" min="1" class="text_pole">
+                                <input type="number" id="copybot_start" value="0" min="0" class="text_pole">
                             </div>
                             
                             <div class="copybot_input_group">
                                 <label for="copybot_end">종료위치:</label>
-                                <input type="number" id="copybot_end" value="10" min="1" class="text_pole">
+                                <input type="number" id="copybot_end" value="10" min="0" class="text_pole">
                             </div>
                             
                             <button id="copybot_execute" class="menu_button" title="메시지를 클립보드에 복사하고 아래 텍스트박스에 표시">
@@ -249,8 +249,8 @@
                 return;
             }
 
-            if (startPos < 1) {
-                toastr.error('시작위치는 1 이상이어야 합니다.');
+            if (startPos < 0) {
+                toastr.error('시작위치는 0 이상이어야 합니다.');
                 return;
             }
 
