@@ -55,12 +55,32 @@
                         </div>
                         <textarea id="copybot_textbox" placeholder="복사된 내용이 여기에 표시됩니다..." readonly></textarea>
                     </div>
+                    
+                    <!-- 메시지 이동 섹션 -->
+                    <div class="copybot_section copybot_section_dark">
+                        <div class="copybot_jump_row">
+                            <button id="copybot_jump_first" class="copybot_jump_button" title="첫 번째 메시지로 이동">
+                                첫 메시지로
+                            </button>
+                            
+                            <button id="copybot_jump_last" class="copybot_jump_button" title="마지막 메시지로 이동">
+                                마지막 메시지로
+                            </button>
+                            
+                            <div class="copybot_jump_input_group">
+                                <input type="number" id="copybot_jump_number" placeholder="번호" min="0" class="text_pole">
+                                <button id="copybot_jump_to" class="copybot_jump_button" title="지정한 메시지 번호로 이동">
+                                    이동
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>`;
 
-    // 메시지 복사 명령 실행 함수 (기존 방식 유지)
+    // 메시지 복사 명령 실행 함수
     async function executeCopyCommand(start, end) {
         try {
             // SillyTavern 명령어 구성
@@ -68,7 +88,7 @@
             
             console.log(`깡갤 복사기: 실행 중인 명령어 - ${command}`);
             
-            // 방법 1: 채팅 입력창에 직접 입력하고 전송
+            // 채팅 입력창에 직접 입력하고 전송
             const chatInput = $('#send_textarea');
             if (chatInput.length > 0) {
                 // 기존 텍스트 백업
@@ -124,7 +144,50 @@
         }
     }
 
-    // 텍스트박스 내용을 클립보드에 복사하는 함수 (간단한 버전)
+    // 메시지 이동 명령 실행 함수
+    async function executeJumpCommand(messageNumber) {
+        try {
+            // SillyTavern 명령어 구성
+            const command = `/chat-jump ${messageNumber}`;
+            
+            console.log(`깡갤 복사기: 실행 중인 이동 명령어 - ${command}`);
+            
+            // 채팅 입력창에 직접 입력하고 전송
+            const chatInput = $('#send_textarea');
+            if (chatInput.length > 0) {
+                // 기존 텍스트 백업
+                const originalText = chatInput.val();
+                
+                // 명령어 입력
+                chatInput.val(command);
+                chatInput.trigger('input');
+                
+                // 전송 버튼 클릭
+                setTimeout(() => {
+                    $('#send_but').click();
+                    
+                    // 원래 텍스트 복원 (명령어 실행 후)
+                    setTimeout(() => {
+                        if (originalText) {
+                            chatInput.val(originalText);
+                        }
+                    }, 500);
+                }, 100);
+                
+                toastr.success(messageNumber === '{{lastMessageId}}' ? '마지막 메시지로 이동!' : `메시지 #${messageNumber}로 이동!`);
+                
+            } else {
+                toastr.error('채팅 입력창을 찾을 수 없습니다.');
+                console.error('깡갤 복사기: #send_textarea 요소를 찾을 수 없음');
+            }
+            
+        } catch (error) {
+            console.error('깡갤 복사기 이동 오류:', error);
+            toastr.error('메시지 이동 중 오류가 발생했습니다.');
+        }
+    }
+
+    // 텍스트박스 내용을 클립보드에 복사하는 함수
     async function copyTextboxContent() {
         try {
             const textboxContent = $('#copybot_textbox').val();
@@ -162,7 +225,7 @@
         }
     }
 
-    // 텍스트박스에서 태그 제거 함수 (개선된 버전)
+    // 텍스트박스에서 태그 제거 함수
     function removeTagsFromTextbox() {
         try {
             const currentText = $('#copybot_textbox').val();
@@ -183,8 +246,7 @@
             while (iterationCount < maxIterations) {
                 const previousText = cleanedText;
                 
-                // 여러 줄에 걸친 모든 태그 제거 (dotAll 플래그 사용)
-                // stat, style, div, choices, tableEdit, disclaimer 등 모든 태그
+                // 여러 줄에 걸친 모든 태그 제거
                 cleanedText = cleanedText.replace(/<([^>\/\s]+)(?:\s[^>]*)?>[\s\S]*?<\/\1>/g, '');
                 
                 iterationCount++;
@@ -197,7 +259,7 @@
                 console.log(`깡갤 복사기: 태그 제거 반복 ${iterationCount}, 현재 길이: ${cleanedText.length}`);
             }
             
-            // 2단계: 남은 단독 태그들 제거 (자체 닫는 태그나 열린 태그)
+            // 2단계: 남은 단독 태그들 제거
             cleanedText = cleanedText.replace(/<[^>]*>/g, '');
             
             // 3단계: 연속된 빈 줄 정리
@@ -270,7 +332,7 @@
             copyTextboxContent();
         });
 
-        // Enter 키 지원
+        // Enter 키 지원 (복사 범위)
         $(document).off('keypress', '#copybot_start, #copybot_end').on('keypress', '#copybot_start, #copybot_end', function(e) {
             if (e.which === 13) { // Enter key
                 console.log('깡갤 복사기: Enter 키 감지');
@@ -288,6 +350,59 @@
             const hasContent = $(this).val().trim().length > 0;
             $('#copybot_copy_content').prop('disabled', !hasContent);
             $('#copybot_remove_tags').prop('disabled', !hasContent);
+        });
+
+        // 메시지 이동 관련 이벤트 핸들러
+        
+        // 처음 메시지로 이동
+        $(document).off('click', '#copybot_jump_first').on('click', '#copybot_jump_first', function() {
+            console.log('깡갤 복사기: 첫 메시지 이동 버튼 클릭됨');
+            
+            // 확인창 표시
+            const confirmMessage = `첫 메시지로 이동합니다.\n\n누적된 채팅이 많을 경우 심한 렉에 걸리거나 튕길 수 있습니다.\n\n정말 이동하시겠습니까?\n실수로 누른 거라면 '취소'를 눌러주세요.`;
+            
+            if (confirm(confirmMessage)) {
+                console.log('깡갤 복사기: 첫 메시지 이동 확인됨');
+                executeJumpCommand(0);
+            } else {
+                console.log('깡갤 복사기: 첫 메시지 이동 취소됨');
+                toastr.info('이동이 취소되었습니다.');
+            }
+        });
+
+        // 마지막 메시지로 이동
+        $(document).off('click', '#copybot_jump_last').on('click', '#copybot_jump_last', function() {
+            console.log('깡갤 복사기: 마지막 메시지 이동 버튼 클릭됨');
+            executeJumpCommand('{{lastMessageId}}');
+        });
+
+        // 특정 번호로 이동
+        $(document).off('click', '#copybot_jump_to').on('click', '#copybot_jump_to', function() {
+            console.log('깡갤 복사기: 메시지 번호 이동 버튼 클릭됨');
+            
+            const jumpNumber = parseInt($("#copybot_jump_number").val());
+
+            // 입력값 검증
+            if (isNaN(jumpNumber)) {
+                toastr.error('올바른 메시지 번호를 입력해주세요.');
+                return;
+            }
+
+            if (jumpNumber < 0) {
+                toastr.error('메시지 번호는 0 이상이어야 합니다.');
+                return;
+            }
+
+            // 메시지 이동 명령 실행
+            executeJumpCommand(jumpNumber);
+        });
+
+        // 이동 번호 입력창에서 Enter 키 지원
+        $(document).off('keypress', '#copybot_jump_number').on('keypress', '#copybot_jump_number', function(e) {
+            if (e.which === 13) { // Enter key
+                console.log('깡갤 복사기: 이동 번호 Enter 키 감지');
+                $("#copybot_jump_to").click();
+            }
         });
         
         console.log('깡갤 복사기: 이벤트 핸들러 설정 완료');

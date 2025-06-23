@@ -1,27 +1,41 @@
 /* 깡갤 복사기 스타일 - 심플 화이트 */
 
 .copybot_panel {
-    margin: 15px 0;
-    padding: 20px;
-    background: #ffffff;
+    margin: 2px 0;
+    padding: 2px 8px;
+    background: rgba(255, 255, 255, 0.2);
     border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    border: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
 /* 섹션 구분 */
 .copybot_section {
-    margin: 15px 0;
-    padding: 16px;
-    border: 1px solid #e2e8f0;
+    margin: 6px 0;
+    padding: 12px 16px 8px 16px;
+    border: 2px solid #e2e8f0;
     border-radius: 8px;
     background: #f8fafc;
+}
+
+/* 어두운 섹션 (메시지 이동용) */
+.copybot_section_dark {
+    background: transparent !important;
+    border: none !important;
+    padding: 6px 0 !important;
+    margin: -6px 0 6px 0 !important;
+}
+
+.copybot_section_dark h5 {
+    color: #2d3748 !important;
+    margin: 0 0 8px 0 !important;
+    font-size: 1.1em !important;
 }
 
 .copybot_section h5 {
     margin: 0 0 10px 0;
     color: #4299e1;
-    font-size: 0.95em;
+    font-size: 1.15em;
     font-weight: 600;
 }
 
@@ -38,32 +52,32 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
 .copybot_section_header h5 {
     margin: 0;
     color: #4299e1;
-    font-size: 0.95em;
+    font-size: 1.1em;
     font-weight: 600;
 }
 
 .copybot_header_buttons {
     display: flex;
-    gap: 8px;
+    gap: 6px;
 }
 
 /* 작은 버튼 스타일 */
 .copybot_small_button {
-    padding: 6px 12px !important;
+    padding: 5px 10px !important;
     font-weight: 500 !important;
-    font-size: 12px !important;
+    font-size: 11px !important;
     background: #48bb78 !important;
     color: #ffffff !important;
     border: none !important;
-    border-radius: 5px !important;
+    border-radius: 4px !important;
     transition: all 0.2s ease !important;
-    box-shadow: 0 1px 3px rgba(72, 187, 120, 0.2) !important;
+    box-shadow: 0 1px 2px rgba(72, 187, 120, 0.2) !important;
     min-width: auto !important;
     white-space: nowrap;
 }
@@ -72,6 +86,71 @@
     background: #38a169 !important;
     transform: translateY(-1px) !important;
     box-shadow: 0 2px 6px rgba(72, 187, 120, 0.3) !important;
+}
+
+/* 메시지 이동 관련 스타일 */
+.copybot_jump_row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+}
+
+.copybot_jump_button {
+    padding: 6px 12px !important;
+    font-weight: 400 !important;
+    font-size: 13px !important;
+    background: #c4b5fd !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 5px !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 1px 2px rgba(196, 181, 253, 0.2) !important;
+    min-width: auto !important;
+    max-width: none !important;
+    width: auto !important;
+    flex: none !important;
+    white-space: nowrap;
+}
+
+.copybot_jump_button:hover:not(:disabled) {
+    background: #a78bfa !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 4px rgba(196, 181, 253, 0.3) !important;
+}
+
+.copybot_jump_button:disabled {
+    background: #cbd5e0 !important;
+    color: #94a3b8 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.copybot_jump_input_group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+.copybot_jump_input_group input {
+    width: 55px !important;
+    padding: 5px 6px !important;
+    border: 1px solid #cbd5e0 !important;
+    border-radius: 4px !important;
+    background: #ffffff !important;
+    color: #2d3748 !important;
+    font-size: 12px !important;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+.copybot_jump_input_group input:focus {
+    border-color: #c4b5fd !important;
+    box-shadow: 0 0 0 2px rgba(196, 181, 253, 0.1) !important;
+    outline: none;
 }
 
 .copybot_small_button:disabled {
@@ -85,28 +164,28 @@
 .copybot_controls {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 6px;
 }
 
 .copybot_input_row {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 12px;
     flex-wrap: wrap;
-    margin-bottom: 10px;
+    margin-bottom: 4px;
 }
 
 .copybot_input_group {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
 
 .copybot_input_group label {
-    min-width: 65px;
+    min-width: 60px;
     color: #4a5568;
     font-weight: 500;
-    font-size: 14px;
+    font-size: 13px;
     white-space: nowrap;
 }
 
@@ -151,7 +230,7 @@
 }
 
 .copybot_result {
-    margin-top: 15px;
+    margin-top: 2px;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -186,36 +265,129 @@
     color: #a0aec0;
 }
 
+/* 리사이즈 핸들을 크게 만들기 - 웹킷 기반 브라우저 */
+#copybot_textbox::-webkit-resizer {
+    border: 8px solid transparent !important;
+    border-bottom-color: #cbd5e0 !important;
+    border-right-color: #cbd5e0 !important;
+    background: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 2px,
+        #cbd5e0 2px,
+        #cbd5e0 4px
+    ) !important;
+    width: 20px !important;
+    height: 20px !important;
+    cursor: nw-resize !important;
+}
+
+#copybot_textbox:focus::-webkit-resizer {
+    border-bottom-color: #4299e1 !important;
+    border-right-color: #4299e1 !important;
+    background: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 2px,
+        #4299e1 2px,
+        #4299e1 4px
+    ) !important;
+}
+
 /* 반응형 디자인 */
 @media (max-width: 600px) {
     .copybot_input_row {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
+        flex-direction: row;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: nowrap;
     }
     
     .copybot_input_group {
-        width: 100%;
-        justify-content: space-between;
+        flex: 0 0 auto;
+        justify-content: center;
+    }
+    
+    .copybot_input_group label {
+        min-width: 40px;
+        font-size: 12px;
     }
     
     .copybot_input_group input.text_pole {
-        width: 80px !important;
+        width: 50px !important;
+        padding: 6px 4px !important;
+        font-size: 13px !important;
+        border: 1px solid rgba(226, 232, 240, 0.5) !important;
     }
     
     #copybot_execute {
-        width: 100% !important;
-        margin-top: 10px;
+        padding: 6px 10px !important;
+        font-size: 12px !important;
+        flex: 0 0 auto !important;
+        margin-top: 0 !important;
     }
     
     .copybot_section_header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+    }
+    
+    .copybot_section_header h5 {
+        flex: 1;
+        font-size: 1.0em !important;
     }
     
     .copybot_header_buttons {
-        width: 100%;
+        flex: 0 0 auto;
         justify-content: flex-end;
+    }
+    
+    .copybot_jump_row {
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 6px !important;
+        flex-wrap: nowrap !important;
+    }
+    
+    .copybot_jump_button {
+        width: auto !important;
+        flex: none !important;
+        padding: 6px 10px !important;
+        font-size: 12px !important;
+        font-weight: 400 !important;
+        background: #c4b5fd !important;
+        min-width: auto !important;
+        max-width: none !important;
+        white-space: nowrap !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        border-radius: 5px !important;
+        box-shadow: 0 1px 2px rgba(196, 181, 253, 0.2) !important;
+    }
+    
+    .copybot_jump_input_group {
+        justify-content: flex-start !important;
+        flex: none !important;
+        gap: 4px !important;
+        margin-left: auto !important;
+    }
+    
+    .copybot_jump_input_group input {
+        width: 50px !important;
+        padding: 8px 6px !important;
+        font-size: 13px !important;
+        border: 1px solid rgba(203, 213, 224, 0.8) !important;
+    }
+    
+    .copybot_jump_input_group button {
+        flex: none !important;
+        padding: 6px 10px !important;
+        font-size: 12px !important;
+        font-weight: 400 !important;
+        background: #c4b5fd !important;
+        border-radius: 5px !important;
+        box-shadow: 0 1px 2px rgba(196, 181, 253, 0.2) !important;
     }
 }
