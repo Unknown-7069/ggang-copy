@@ -18,12 +18,10 @@
             </div>
             <div class="inline-drawer-content">
                 <div class="copybot_panel">
-                    <h4>메시지 복사 도구</h4>
-                    
                     <!-- 입력 섹션 -->
                     <div class="copybot_section">
                         <h5>📥 메시지 범위 입력</h5>
-                        <small>메시지 범위를 입력하고 단순 복사 버튼을 클릭하면 자동으로 <code>/messages names=off [start]-[end] | /copy</code> 명령을 실행합니다.</small>
+                        <small>메세지 범위 입력 후 단순 복사 버튼을 클릭하면 클립보드에 자동 복사&아래 텍스트박스에 해당 내용이 삽입됩니다.</small>
                         
                         <div class="copybot_input_row">
                             <div class="copybot_input_group">
@@ -40,24 +38,22 @@
                                 단순 복사
                             </button>
                         </div>
-                        <div class="copybot_description">
-                            <small>💡 클립보드에 자동 복사 된 후 아래 텍스트박스에 해당 내용 삽입</small>
-                        </div>
                     </div>
                     
                     <!-- 결과 섹션 -->
                     <div class="copybot_section">
-                        <h5>📤 복사 결과 및 편집</h5>
-                        <textarea id="copybot_textbox" placeholder="복사된 내용이 여기에 표시됩니다..." readonly></textarea>
-                        
-                        <div class="copybot_button_row">
-                            <button id="copybot_copy_content" class="menu_button" title="현재 텍스트박스 내용을 클립보드에 복사" disabled>
-                                📋 위 내용 복사
-                            </button>
-                            <button id="copybot_remove_tags" class="menu_button" title="텍스트박스에서 태그 제거" disabled>
-                                🗑️ 태그 제거
-                            </button>
+                        <div class="copybot_section_header">
+                            <h5>📤 복사 결과 및 편집</h5>
+                            <div class="copybot_header_buttons">
+                                <button id="copybot_copy_content" class="copybot_small_button" title="현재 텍스트박스 내용을 클립보드에 복사" disabled>
+                                    아래 내용 복사
+                                </button>
+                                <button id="copybot_remove_tags" class="copybot_small_button" title="텍스트박스에서 태그 제거" disabled>
+                                    태그 제거
+                                </button>
+                            </div>
                         </div>
+                        <textarea id="copybot_textbox" placeholder="복사된 내용이 여기에 표시됩니다..." readonly></textarea>
                     </div>
                 </div>
             </div>
@@ -141,7 +137,7 @@
             // 클립보드에 복사
             await navigator.clipboard.writeText(textboxContent);
             
-            toastr.success('위 내용이 클립보드에 복사되었습니다!');
+            toastr.success('아래 내용이 클립보드에 복사되었습니다!');
             console.log('깡갤 복사기: 텍스트박스 내용 클립보드 복사 완료');
             
         } catch (error) {
@@ -156,7 +152,7 @@
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
                 
-                toastr.success('위 내용이 클립보드에 복사되었습니다! (fallback)');
+                toastr.success('아래 내용이 클립보드에 복사되었습니다! (fallback)');
                 console.log('깡갤 복사기: fallback 방법으로 클립보드 복사 완료');
                 
             } catch (fallbackError) {
@@ -268,9 +264,9 @@
             removeTagsFromTextbox();
         });
 
-        // 위 내용 복사 버튼 이벤트 핸들러
+        // 아래 내용 복사 버튼 이벤트 핸들러
         $(document).off('click', '#copybot_copy_content').on('click', '#copybot_copy_content', function() {
-            console.log('깡갤 복사기: 위 내용 복사 버튼 클릭됨');
+            console.log('깡갤 복사기: 아래 내용 복사 버튼 클릭됨');
             copyTextboxContent();
         });
 
