@@ -1,0 +1,189 @@
+/* 깡갤 복사기 스타일 */
+
+.copybot_panel {
+    margin: 15px 0;
+    padding: 15px;
+    background-color: var(--black70a);
+    border-radius: 10px;
+    border: 1px solid var(--white30a);
+}
+
+.copybot_panel h4 {
+    margin: 0 0 15px 0;
+    color: var(--SmartThemeEmColor);
+    font-size: 18px;
+    font-weight: bold;
+    text-align: center;
+}
+
+/* 섹션 구분 */
+.copybot_section {
+    margin: 15px 0;
+    padding: 15px;
+    border: 1px solid var(--white20a);
+    border-radius: 8px;
+    background-color: var(--black50a);
+}
+
+.copybot_section h5 {
+    margin: 0 0 8px 0;
+    color: var(--SmartThemeEmColor);
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.copybot_section small {
+    color: var(--SmartThemeQuoteColor);
+    display: block;
+    margin-bottom: 15px;
+    line-height: 1.4;
+}
+
+.copybot_controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.copybot_input_row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.copybot_input_group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.copybot_input_group label {
+    min-width: 70px;
+    color: var(--SmartThemeEmColor);
+    font-weight: bold;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.copybot_input_group input.text_pole {
+    width: 80px;
+    flex-shrink: 0;
+}
+
+.copybot_description {
+    margin-top: 8px;
+    text-align: center;
+}
+
+.copybot_description small {
+    color: var(--SmartThemeQuoteColor);
+    font-style: italic;
+}
+
+#copybot_execute {
+    padding: 6px 12px;
+    font-weight: bold;
+    font-size: 14px;
+    margin-left: 10px;
+}
+
+#copybot_execute:hover {
+    background-color: var(--SmartThemeBlurTintColor);
+}
+
+.copybot_result {
+    margin-top: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#copybot_textbox {
+    width: 100%;
+    min-height: 120px;
+    max-height: 300px;
+    padding: 10px;
+    border: 1px solid var(--white30a);
+    border-radius: 5px;
+    background-color: var(--black50a);
+    color: var(--SmartThemeEmColor);
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    resize: vertical;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin-bottom: 10px;
+}
+
+#copybot_textbox:focus {
+    border-color: var(--SmartThemeBlurTintColor);
+    outline: none;
+    background-color: var(--black30a);
+}
+
+#copybot_textbox::placeholder {
+    color: var(--SmartThemeQuoteColor);
+    opacity: 0.7;
+}
+
+/* 버튼 가로 배치 */
+.copybot_button_row {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.copybot_button_row button {
+    flex: 1;
+    padding: 8px 12px;
+    font-weight: bold;
+    font-size: 14px;
+    min-width: 120px;
+}
+
+.copybot_button_row button:hover:not(:disabled) {
+    background-color: var(--SmartThemeBlurTintColor);
+}
+
+.copybot_button_row button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 600px) {
+    .copybot_input_row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .copybot_input_group {
+        width: 100%;
+    }
+    
+    .copybot_input_group label {
+        min-width: auto;
+    }
+    
+    .copybot_input_group input.text_pole {
+        width: 100%;
+    }
+    
+    #copybot_execute {
+        margin-left: 0;
+        width: 100%;
+    }
+    
+    .copybot_button_row {
+        flex-direction: column;
+    }
+    
+    .copybot_button_row button {
+        width: 100%;
+        min-width: auto;
+    }
+}
