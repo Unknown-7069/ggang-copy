@@ -9,6 +9,28 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
+/* 설명 섹션 */
+.copybot_description_section {
+    margin: 6px 0;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    background: #e8f4fd;
+    border-left: 4px solid #4299e1;
+}
+
+.copybot_description {
+    font-size: 13px;
+    color: #2d3748;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.copybot_description strong {
+    color: #2b6cb0;
+    font-weight: 600;
+}
+
 /* 섹션 구분 */
 .copybot_section {
     margin: 6px 0;
@@ -88,6 +110,115 @@
     box-shadow: 0 2px 6px rgba(72, 187, 120, 0.3) !important;
 }
 
+/* 텍스트박스 아래 버튼들 스타일 */
+.copybot_textbox_buttons {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    margin-bottom: 10px;
+}
+
+.copybot_textbox_button {
+    padding: 6px 12px !important;
+    font-weight: 500 !important;
+    font-size: 12px !important;
+    background: #48bb78 !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 4px !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 1px 2px rgba(72, 187, 120, 0.2) !important;
+    min-width: auto !important;
+    white-space: nowrap;
+}
+
+.copybot_textbox_button:hover:not(:disabled) {
+    background: #38a169 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 6px rgba(72, 187, 120, 0.3) !important;
+}
+
+.copybot_textbox_button:disabled {
+    background: #cbd5e0 !important;
+    color: #a0aec0 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* 줄바꿈 정리 버튼 스타일 */
+.copybot_linebreak_button {
+    background: #ed8936 !important;
+    box-shadow: 0 1px 2px rgba(237, 137, 54, 0.2) !important;
+}
+
+.copybot_linebreak_button:hover:not(:disabled) {
+    background: #dd6b20 !important;
+    box-shadow: 0 2px 6px rgba(237, 137, 54, 0.3) !important;
+}
+
+.copybot_linebreak_button:disabled {
+    background: #cbd5e0 !important;
+    color: #a0aec0 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* txt저장 버튼 스타일 */
+.copybot_save_button {
+    background: #4299e1 !important;
+    box-shadow: 0 1px 2px rgba(66, 153, 225, 0.2) !important;
+    margin-left: auto !important;
+}
+
+.copybot_save_button:hover:not(:disabled) {
+    background: #3182ce !important;
+    box-shadow: 0 2px 6px rgba(66, 153, 225, 0.3) !important;
+}
+
+.copybot_save_button:disabled {
+    background: #cbd5e0 !important;
+    color: #a0aec0 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* 동적 액션 버튼들이 표시될 컨테이너 */
+.copybot_action_buttons_row {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.copybot_action_button {
+    padding: 6px 12px !important;
+    font-weight: 400 !important;
+    font-size: 13px !important;
+    background: #b19ff5 !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 5px !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 1px 2px rgba(177, 159, 245, 0.2) !important;
+    min-width: auto !important;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.copybot_action_button:hover:not(:disabled) {
+    background: #9f7efa !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 4px rgba(177, 159, 245, 0.3) !important;
+}
+
+.copybot_action_button:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 1px 2px rgba(177, 159, 245, 0.2) !important;
+}
+
 /* 메시지 이동 관련 스타일 */
 .copybot_jump_row {
     display: flex;
@@ -153,6 +284,167 @@
     outline: none;
 }
 
+/* 설정 버튼 스타일 */
+.copybot_settings_button {
+    padding: 4px 8px !important;
+    font-weight: 400 !important;
+    font-size: 11px !important;
+    background: #a0aec0 !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 3px !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 1px 2px rgba(160, 174, 192, 0.2) !important;
+    min-width: auto !important;
+    white-space: nowrap;
+    margin-left: 8px;
+}
+
+.copybot_settings_button:hover:not(:disabled) {
+    background: #718096 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 4px rgba(160, 174, 192, 0.3) !important;
+}
+
+/* 설정창 스타일 - 미니멀 화이트 디자인 */
+.copybot_settings_panel {
+    margin-top: 8px;
+    padding: 16px;
+    background: #ffffff;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.copybot_settings_item {
+    margin-bottom: 8px;
+    padding: 12px;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+}
+
+.copybot_settings_item:last-child {
+    margin-bottom: 0;
+}
+
+.copybot_settings_main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0;
+}
+
+.copybot_settings_label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin: 0;
+}
+
+.copybot_toggle_button {
+    padding: 6px 16px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    border: none !important;
+    border-radius: 4px !important;
+    transition: all 0.2s ease !important;
+    min-width: 50px !important;
+    white-space: nowrap;
+}
+
+.copybot_toggle_button[data-enabled="false"] {
+    background: #e9ecef !important;
+    color: #6c757d !important;
+}
+
+.copybot_toggle_button[data-enabled="true"] {
+    background: #48bb78 !important;
+    color: #ffffff !important;
+}
+
+.copybot_toggle_button:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+.copybot_settings_sub_row {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 24px !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+}
+
+.copybot_settings_sub_item {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    margin-bottom: 0;
+    padding: 2px 0;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+.copybot_checkbox {
+    width: 16px !important;
+    height: 16px !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    border: 2px solid #cbd5e0 !important;
+    border-radius: 3px !important;
+    background: #ffffff !important;
+    cursor: pointer !important;
+    flex-shrink: 0 !important;
+    position: relative !important;
+    transition: all 0.2s ease !important;
+}
+
+.copybot_checkbox:hover {
+    border-color: #48bb78 !important;
+    background: #f0fff4 !important;
+}
+
+.copybot_checkbox:checked {
+    background: #48bb78 !important;
+    border-color: #48bb78 !important;
+}
+
+.copybot_checkbox:checked::after {
+    content: '✓' !important;
+    position: absolute !important;
+    top: -2px !important;
+    left: 1px !important;
+    color: #ffffff !important;
+    font-size: 12px !important;
+    font-weight: bold !important;
+    line-height: 1 !important;
+}
+
+.copybot_settings_sub {
+    margin-top: 12px;
+    margin-left: 0;
+    padding: 8px 12px;
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+}
+
+.copybot_settings_sub_item:last-child {
+    margin-bottom: 0;
+}
+
+.copybot_settings_sub_label {
+    font-size: 13px;
+    color: #495057;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    margin: 0;
+}
+
+
+
 .copybot_small_button:disabled {
     background: #cbd5e0 !important;
     color: #a0aec0 !important;
@@ -171,14 +463,14 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     margin-bottom: 4px;
 }
 
 .copybot_input_group {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
 }
 
 .copybot_input_group label {
@@ -191,8 +483,8 @@
 
 /* 숫자 입력창 작게 */
 .copybot_input_group input.text_pole {
-    width: 55px !important;
-    padding: 8px 10px;
+    width: 50px !important;
+    padding: 7px 8px;
     border: 2px solid #e2e8f0;
     border-radius: 6px;
     background: #ffffff;
@@ -210,23 +502,24 @@
 
 /* 단순 복사 버튼 (종료위치 우측에 배치) */
 #copybot_execute {
-    padding: 8px 16px !important;
-    font-weight: 600 !important;
+    padding: 7px 12px !important;
+    font-weight: 500 !important;
     font-size: 14px !important;
     background: #4299e1 !important;
     color: #ffffff !important;
     border: none !important;
-    border-radius: 6px !important;
+    border-radius: 4px !important;
     transition: all 0.2s ease !important;
-    box-shadow: 0 2px 4px rgba(66, 153, 225, 0.2) !important;
+    box-shadow: 0 1px 2px rgba(66, 153, 225, 0.2) !important;
     min-width: auto !important;
     white-space: nowrap;
+    margin-left: auto !important;
 }
 
 #copybot_execute:hover {
     background: #3182ce !important;
     transform: translateY(-1px) !important;
-    box-shadow: 0 4px 8px rgba(66, 153, 225, 0.3) !important;
+    box-shadow: 0 2px 6px rgba(66, 153, 225, 0.3) !important;
 }
 
 .copybot_result {
@@ -251,7 +544,7 @@
     resize: vertical;
     white-space: pre-wrap;
     word-wrap: break-word;
-    margin-bottom: 10px;
+    margin-bottom: 0px;
     transition: all 0.2s ease;
 }
 
@@ -327,21 +620,14 @@
         margin-top: 0 !important;
     }
     
-    .copybot_section_header {
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-        gap: 6px;
+    .copybot_textbox_buttons {
+        flex-wrap: wrap;
+        gap: 4px;
     }
     
-    .copybot_section_header h5 {
-        flex: 1;
-        font-size: 1.0em !important;
-    }
-    
-    .copybot_header_buttons {
-        flex: 0 0 auto;
-        justify-content: flex-end;
+    .copybot_textbox_button {
+        padding: 5px 8px !important;
+        font-size: 11px !important;
     }
     
     .copybot_jump_row {
@@ -389,5 +675,56 @@
         background: #c4b5fd !important;
         border-radius: 5px !important;
         box-shadow: 0 1px 2px rgba(196, 181, 253, 0.2) !important;
+    }
+    
+    .copybot_settings_button {
+        padding: 4px 6px !important;
+        font-size: 10px !important;
+        margin-left: 4px !important;
+    }
+    
+    .copybot_settings_panel {
+        margin-top: 8px;
+        padding: 8px;
+    }
+    
+    .copybot_settings_main {
+        padding: 6px 0;
+    }
+    
+    .copybot_settings_label {
+        font-size: 12px;
+    }
+    
+    .copybot_toggle_button {
+        padding: 3px 8px !important;
+        font-size: 10px !important;
+        min-width: 35px !important;
+    }
+    
+    .copybot_checkbox {
+        width: 14px !important;
+        height: 14px !important;
+    }
+    
+    .copybot_settings_sub {
+        margin-left: 8px;
+        padding-left: 8px;
+    }
+    
+    .copybot_settings_sub_row {
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 15px !important;
+        align-items: center !important;
+        flex-wrap: wrap !important;
+    }
+    
+    .copybot_settings_sub_item {
+        gap: 4px;
+    }
+    
+    .copybot_settings_sub_label {
+        font-size: 11px;
     }
 }
