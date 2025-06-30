@@ -162,11 +162,59 @@
         </div>
     </div>`;
 
-    // [수정] 재생성을 트리거하는 함수 - /trigger 명령어 실행 방식으로 변경
-    function triggerRegeneration() {
-        console.log('깡갤 복사기: /trigger 명령어 실행 중...');
-        executeSimpleCommand('/trigger', '재생성을 요청했습니다.');
+    // ⭐️ [수정] 캐시 우회를 위한 새로운 재생성 함수
+    function triggerCacheBustRegeneration() {
+        console.log('깡갤 복사기: 캐시 우회 재생성 시작...');
+        try {
+            const context = window.SillyTavern.getContext();
+            const chat = context.chat;
+
+            if (!chat || chat.length === 0) {
+                toastr.error('대화 기록이 없어 재생성할 수 없습니다.');
+                return;
+            }
+
+            // 마지막 사용자 메시지를 찾아 인덱스와 내용을 저장
+            let lastUserMessageIndex = -1;
+            let originalMessage = '';
+            for (let i = chat.length - 1; i >= 0; i--) {
+                if (chat[i].is_user) {
+                    lastUserMessageIndex = i;
+                    originalMessage = chat[i].mes;
+                    break;
+                }
+            }
+
+            if (lastUserMessageIndex === -1) {
+                toastr.error('마지막 사용자 메시지를 찾을 수 없어 재생성할 수 없습니다.');
+                return;
+            }
+
+            // 보이지 않는 고유한 암호(Nonce) 생성
+            const nonce = `<!-- regen-id:${Date.now()}-${Math.random()} -->`;
+            
+            // 컨텍스트 내의 마지막 사용자 메시지에 Nonce를 임시로 추가
+            chat[lastUserMessageIndex].mes = `${originalMessage}\n${nonce}`;
+            console.log('깡갤 복사기: Nonce가 추가된 임시 메시지로 재생성 요청');
+
+            // /trigger 명령어를 실행하여 재생성 요청
+            executeSimpleCommand('/trigger', '캐시를 우회하여 재생성합니다.', () => {
+                // 재생성 요청 후, 임시로 추가했던 Nonce를 제거하여 메시지를 원상복구
+                setTimeout(() => {
+                    const currentChat = window.SillyTavern.getContext().chat;
+                    if (currentChat[lastUserMessageIndex] && currentChat[lastUserMessageIndex].mes.includes(nonce)) {
+                        currentChat[lastUserMessageIndex].mes = originalMessage;
+                        console.log('깡갤 복사기: 마지막 사용자 메시지를 성공적으로 원상복구했습니다.');
+                    }
+                }, 1000); // 1초 후 복구하여 안정성 확보
+            });
+
+        } catch (error) {
+            console.error('깡갤 복사기: 캐시 우회 재생성 중 오류 발생', error);
+            toastr.error('캐시 우회 재생성 중 오류가 발생했습니다. 콘솔을 확인해주세요.');
+        }
     }
+
 
     // 설정 저장 함수
     function saveSettings() {
@@ -474,8 +522,10 @@
                     checkboxId: 'copybot_delete_regenerate_icon', 
                     iconClass: 'fa-redo', 
                     iconId: 'copybot_input_delete_regen',
-                    title: '마지막 메시지 삭제 후 재생성',
-                    action: () => executeSimpleCommand('/del 1', '마지막 메시지를 삭제하고 재생성합니다.', triggerRegeneration)
+                    // ⭐️ [수정] 사용자에게 캐시 우회 기능임을 알려주는 툴팁
+                    title: '마지막 메시지 삭제 후 재생성 (캐시 우회)',
+                    // ⭐️ [수정] 캐시 우회 함수를 호출하도록 변경
+                    action: () => executeSimpleCommand('/del 1', '마지막 메시지를 삭제하고 재생성합니다.', triggerCacheBustRegeneration)
                 }
             ];
 
@@ -676,7 +726,8 @@
                     executeSimpleCommand('/del 1', '마지막 메시지 1개를 삭제했습니다.');
                     break;
                 case 'copybot_action_delete_regen':
-                    executeSimpleCommand('/del 1', '마지막 메시지를 삭제하고 재생성합니다.', triggerRegeneration);
+                    // ⭐️ [수정] 캐시 우회 함수를 호출하도록 변경
+                    executeSimpleCommand('/del 1', '마지막 메시지를 삭제하고 재생성합니다.', triggerCacheBustRegeneration);
                     break;
             }
         });
