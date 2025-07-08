@@ -8,6 +8,37 @@
 
     let isInitialized = false;
 
+    // 색상 변환을 위한 헬퍼 함수들
+    function rgbStringToObj(rgbStr) {
+        const match = rgbStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+        if (!match) return { r: 0, g: 0, b: 0, a: 1 };
+        return {
+            r: parseInt(match[1], 10),
+            g: parseInt(match[2], 10),
+            b: parseInt(match[3], 10),
+            a: match[4] !== undefined ? parseFloat(match[4]) : 1,
+        };
+    }
+
+    function rgbToHsl(r, g, b) {
+        r /= 255; g /= 255; b /= 255;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        let h, s, l = (max + min) / 2;
+        if (max === min) {
+            h = s = 0; // 흑백
+        } else {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) {
+                case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                case g: h = (b - r) / d + 2; break;
+                case b: h = (r - g) / d + 4; break;
+            }
+            h /= 6;
+        }
+        return { h: h * 360, s: s * 100, l: l * 100 };
+    }
+    
     // settings.html 내용을 직접 포함 (404 오류 해결)
     const settingsHTML = `
     <div id="copybot_settings" class="extension_settings">
@@ -75,8 +106,14 @@
                                 <button id="copybot_jump_to" class="copybot_jump_button" title="지정한 메시지 번호로 이동">
                                     이동
                                 </button>
-                                <button id="copybot_open_settings_button" class="copybot_settings_button" title="설정 옵션">
-                                    설정
+                            </div>
+                            
+                            <div class="copybot_settings_buttons_group">
+                                <button id="copybot_open_ghostwrite_button" class="copybot_settings_button" title="대필 옵션">
+                                    대필
+                                </button>
+                                <button id="copybot_open_settings_button" class="copybot_settings_button" title="편의기능 옵션">
+                                    편의기능
                                 </button>
                             </div>
                         </div>
@@ -84,8 +121,51 @@
                         <!-- 동적 액션 버튼이 표시될 컨테이너 -->
                         <div id="copybot_action_buttons" class="copybot_action_buttons_row"></div>
                         
-                        <!-- 설정창 -->
+                        <!-- 대필 설정창 -->
+                        <div id="copybot_ghostwrite_panel" class="copybot_settings_panel" style="display: none;">
+                            <div class="copybot_settings_item">
+                                <div class="copybot_settings_main">
+                                    <span class="copybot_settings_label">대필 프롬프트(명령하기)</span>
+                                    <button id="copybot_ghostwrite_toggle" class="copybot_toggle_button" data-enabled="false">
+                                        OFF
+                                    </button>
+                                </div>
+                                <textarea id="copybot_ghostwrite_textbox" placeholder="5문장 이하로, 정중한 말투, 1인칭, NSFW 등..." class="copybot_ghostwrite_text" style="margin-top: 12px; display: none;"></textarea>
+                            </div>
+                            
+                            <div class="copybot_settings_item">
+                                <div class="copybot_settings_main">
+                                    <span class="copybot_settings_label">대필 버튼 위치</span>
+                                </div>
+                                <div id="copybot_ghostwrite_position_options" class="copybot_settings_sub" style="display: none;">
+                                    <div class="copybot_settings_sub_row" style="flex-wrap: wrap;">
+                                        <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                            <input type="radio" id="copybot_ghostwrite_position_left" name="copybot_ghostwrite_position" value="left" class="copybot_radio">
+                                            <label for="copybot_ghostwrite_position_left" class="copybot_settings_sub_label">좌측</label>
+                                        </div>
+                                        <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                            <input type="radio" id="copybot_ghostwrite_position_bottom_right" name="copybot_ghostwrite_position" value="bottom_right" class="copybot_radio">
+                                            <label for="copybot_ghostwrite_position_bottom_right" class="copybot_settings_sub_label">우상단</label>
+                                        </div>
+                                        <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                            <input type="radio" id="copybot_ghostwrite_position_bottom_left" name="copybot_ghostwrite_position" value="bottom_left" class="copybot_radio">
+                                            <label for="copybot_ghostwrite_position_bottom_left" class="copybot_settings_sub_label">좌하단</label>
+                                        </div>
+                                        <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                            <input type="radio" id="copybot_ghostwrite_position_right" name="copybot_ghostwrite_position" value="right" class="copybot_radio" checked>
+                                            <label for="copybot_ghostwrite_position_right" class="copybot_settings_sub_label">기본(우측)</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666; display:none;">
+                                    대필 아이콘(<i class="fa-solid fa-user-edit"></i>)을 누르면, 위에 써진 내용(프롬프트)와 채팅창의 내용을 조합하여 사용자를 대신해 봇이 글을 써줍니다. (비어있는 곳은 알아서 무시합니다)
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 편의기능 설정창 -->
                         <div id="copybot_settings_panel" class="copybot_settings_panel" style="display: none;">
+                            
                             <div class="copybot_settings_item">
                                 <div class="copybot_settings_main">
                                     <span class="copybot_settings_label">작성중인 메세지 태그제거</span>
@@ -148,6 +228,33 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- 입력필드 위치 설정 섹션 -->
+                            <div class="copybot_settings_item">
+                                <div class="copybot_settings_main">
+                                    <span class="copybot_settings_label">3종 아이콘 위치</span>
+                                </div>
+                                <div class="copybot_settings_sub" style="display: block;">
+                                    <div class="copybot_settings_sub_row" style="flex-wrap: wrap;">
+                                        <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                            <input type="radio" id="copybot_position_left" name="copybot_position" value="left" class="copybot_radio">
+                                            <label for="copybot_position_left" class="copybot_settings_sub_label">좌측</label>
+                                        </div>
+                                        <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                            <input type="radio" id="copybot_position_bottom_right" name="copybot_position" value="bottom_right" class="copybot_radio">
+                                            <label for="copybot_position_bottom_right" class="copybot_settings_sub_label">우상단</label>
+                                        </div>
+                                        <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                            <input type="radio" id="copybot_position_bottom_left" name="copybot_position" value="bottom_left" class="copybot_radio">
+                                            <label for="copybot_position_bottom_left" class="copybot_settings_sub_label">좌하단</label>
+                                        </div>
+                                        <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                            <input type="radio" id="copybot_position_right" name="copybot_position" value="right" class="copybot_radio" checked>
+                                            <label for="copybot_position_right" class="copybot_settings_sub_label">기본(우측)</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             
                             <!-- 설명 섹션 -->
                             <div class="copybot_section copybot_description_section">
@@ -162,7 +269,7 @@
         </div>
     </div>`;
 
-    // ⭐️ [수정] 캐시 우회를 위한 새로운 재생성 함수
+    // 캐시 우회를 위한 새로운 재생성 함수
     function triggerCacheBustRegeneration() {
         console.log('깡갤 복사기: 캐시 우회 재생성 시작...');
         try {
@@ -174,7 +281,6 @@
                 return;
             }
 
-            // 마지막 사용자 메시지를 찾아 인덱스와 내용을 저장
             let lastUserMessageIndex = -1;
             let originalMessage = '';
             for (let i = chat.length - 1; i >= 0; i--) {
@@ -190,23 +296,19 @@
                 return;
             }
 
-            // 보이지 않는 고유한 암호(Nonce) 생성
             const nonce = `<!-- regen-id:${Date.now()}-${Math.random()} -->`;
             
-            // 컨텍스트 내의 마지막 사용자 메시지에 Nonce를 임시로 추가
             chat[lastUserMessageIndex].mes = `${originalMessage}\n${nonce}`;
             console.log('깡갤 복사기: Nonce가 추가된 임시 메시지로 재생성 요청');
 
-            // /trigger 명령어를 실행하여 재생성 요청
             executeSimpleCommand('/trigger', '캐시를 우회하여 재생성합니다.', () => {
-                // 재생성 요청 후, 임시로 추가했던 Nonce를 제거하여 메시지를 원상복구
                 setTimeout(() => {
                     const currentChat = window.SillyTavern.getContext().chat;
                     if (currentChat[lastUserMessageIndex] && currentChat[lastUserMessageIndex].mes.includes(nonce)) {
                         currentChat[lastUserMessageIndex].mes = originalMessage;
                         console.log('깡갤 복사기: 마지막 사용자 메시지를 성공적으로 원상복구했습니다.');
                     }
-                }, 1000); // 1초 후 복구하여 안정성 확보
+                }, 1000);
             });
 
         } catch (error) {
@@ -220,6 +322,12 @@
     function saveSettings() {
         try {
             const settings = {
+                position: $('input[name="copybot_position"]:checked').val() || 'right',
+                ghostwrite: {
+                    enabled: $('#copybot_ghostwrite_toggle').attr('data-enabled') === 'true',
+                    text: $('#copybot_ghostwrite_textbox').val() || '',
+                    position: $('input[name="copybot_ghostwrite_position"]:checked').val() || 'right'
+                },
                 tagRemove: {
                     enabled: $('#copybot_tag_remove_toggle').attr('data-enabled') === 'true',
                     button: $('#copybot_tag_remove_button').is(':checked'),
@@ -243,7 +351,7 @@
         }
     }
 
-    // 설정 로드 함수
+    // ⭐️ 설정 로드 함수 (대필 UI 제어 로직 수정)
     function loadSettings() {
         try {
             const savedSettings = localStorage.getItem('copybot_settings');
@@ -255,12 +363,31 @@
             const settings = JSON.parse(savedSettings);
             console.log('깡갤 복사기: 설정 로드 중', settings);
 
-            // 토글 버튼 상태 복원
+            if (settings.position) {
+                $(`input[name="copybot_position"][value="${settings.position}"]`).prop('checked', true);
+            }
+
+            if (settings.ghostwrite) {
+                const isGhostwriteEnabled = settings.ghostwrite.enabled === true;
+                $('#copybot_ghostwrite_toggle').attr('data-enabled', isGhostwriteEnabled).text(isGhostwriteEnabled ? 'ON' : 'OFF');
+                $('#copybot_ghostwrite_textbox').val(settings.ghostwrite.text || '');
+                if (settings.ghostwrite.position) {
+                    $(`input[name="copybot_ghostwrite_position"][value="${settings.ghostwrite.position}"]`).prop('checked', true);
+                }
+                
+                // 토글 상태에 따라 모든 관련 UI를 제어
+                const ghostwriteElements = $('#copybot_ghostwrite_position_options, #copybot_ghostwrite_panel .copybot_description, #copybot_ghostwrite_textbox');
+                if (isGhostwriteEnabled) {
+                    ghostwriteElements.show();
+                } else {
+                    ghostwriteElements.hide();
+                }
+            }
+
             $('#copybot_tag_remove_toggle').attr('data-enabled', settings.tagRemove.enabled).text(settings.tagRemove.enabled ? 'ON' : 'OFF');
             $('#copybot_delete_toggle').attr('data-enabled', settings.delete.enabled).text(settings.delete.enabled ? 'ON' : 'OFF');
             $('#copybot_delete_regenerate_toggle').attr('data-enabled', settings.deleteRegenerate.enabled).text(settings.deleteRegenerate.enabled ? 'ON' : 'OFF');
 
-            // 체크박스 상태 복원
             $('#copybot_tag_remove_button').prop('checked', settings.tagRemove.button);
             $('#copybot_tag_remove_icon').prop('checked', settings.tagRemove.icon);
             $('#copybot_delete_button').prop('checked', settings.delete.button);
@@ -268,19 +395,54 @@
             $('#copybot_delete_regenerate_button').prop('checked', settings.deleteRegenerate.button);
             $('#copybot_delete_regenerate_icon').prop('checked', settings.deleteRegenerate.icon);
 
-            // 옵션 패널 표시 상태 복원
-            if (settings.tagRemove.enabled) $('#copybot_tag_remove_options').show();
-            if (settings.delete.enabled) $('#copybot_delete_options').show();
-            if (settings.deleteRegenerate.enabled) $('#copybot_delete_regenerate_options').show();
-
+            if (settings.tagRemove.enabled) $('#copybot_tag_remove_options').show(); else $('#copybot_tag_remove_options').hide();
+            if (settings.delete.enabled) $('#copybot_delete_options').show(); else $('#copybot_delete_options').hide();
+            if (settings.deleteRegenerate.enabled) $('#copybot_delete_regenerate_options').show(); else $('#copybot_delete_regenerate_options').hide();
+            
             console.log('깡갤 복사기: 설정 로드 완료');
-        } catch (error) {
+        } catch (error)
+        {
             console.error('깡갤 복사기: 설정 로드 실패', error);
         }
     }
+    
+    // 대필 명령 실행 함수
+    function executeGhostwrite() {
+        try {
+            const promptText = $('#copybot_ghostwrite_textbox').val().trim();
+            const chatInput = $('#send_textarea');
+            const chatInputText = chatInput.val().trim();
+            
+            let finalPrompt = '';
 
-    // 단순 명령어를 실행하고, 선택적으로 콜백을 실행하는 범용 함수
-    async function executeSimpleCommand(command, successMessage, callback) {
+            if (promptText) {
+                finalPrompt += promptText;
+            }
+            if (chatInputText) {
+                if (finalPrompt) finalPrompt += ' '; 
+                finalPrompt += chatInputText;
+            }
+
+            let command = '/impersonate {{char}}';
+            if (finalPrompt) {
+                command += ` ${finalPrompt}`;
+            }
+            
+            let toastMessage = '대필 명령을 실행합니다.';
+            if (finalPrompt) {
+                toastMessage = `대필 명령 실행: ${finalPrompt}`;
+            }
+
+            executeSimpleCommand(command, toastMessage, null, true);
+
+        } catch (error) {
+            console.error('깡갤 복사기: 대필 실행 중 오류', error);
+            toastr.error('대필 실행 중 오류가 발생했습니다.');
+        }
+    }
+
+    // 단순 명령어를 실행하는 범용 함수
+    async function executeSimpleCommand(command, successMessage, callback, isGhostwriting = false) {
         try {
             console.log(`깡갤 복사기: 실행 중인 명령어 - ${command}`);
             const chatInput = $('#send_textarea');
@@ -291,7 +453,11 @@
                 setTimeout(() => {
                     $('#send_but').click();
                     setTimeout(() => {
-                        chatInput.val(originalText || '');
+                        if (!isGhostwriting) {
+                            chatInput.val(originalText || '');
+                        } else {
+                            chatInput.val(''); 
+                        }
                         if (typeof callback === 'function') {
                             callback();
                         }
@@ -314,69 +480,22 @@
     async function executeCopyCommand(start, end) {
         try {
             const command = `/messages names=off ${start}-${end} | /copy`;
-            console.log(`깡갤 복사기: 실행 중인 명령어 - ${command}`);
-            const chatInput = $('#send_textarea');
-            if (chatInput.length > 0) {
-                const originalText = chatInput.val();
-                chatInput.val(command);
-                chatInput.trigger('input');
-                setTimeout(() => {
-                    $('#send_but').click();
-                    setTimeout(() => {
-                        if (originalText) {
-                            chatInput.val(originalText);
-                        }
-                    }, 500);
-                }, 100);
-                toastr.success(`메시지 ${start}-${end} 복사 명령 실행!`);
-                setTimeout(async () => {
-                    try {
-                        const clipboardText = await navigator.clipboard.readText();
-                        if (clipboardText && clipboardText.trim()) {
-                            $('#copybot_textbox').val(clipboardText);
-                            $('#copybot_remove_tags, #copybot_copy_content, #copybot_linebreak_fix, #copybot_save_txt').prop('disabled', false);
-                            console.log('깡갤 복사기: 텍스트박스에 내용 표시 완료');
-                        }
-                    } catch (error) {
-                        console.log('깡갤 복사기: 클립보드 읽기 실패 (권한 문제일 수 있음)', error);
+            executeSimpleCommand(command, `메시지 ${start}-${end} 복사 명령 실행!`);
+            setTimeout(async () => {
+                try {
+                    const clipboardText = await navigator.clipboard.readText();
+                    if (clipboardText && clipboardText.trim()) {
+                        $('#copybot_textbox').val(clipboardText);
+                        $('#copybot_remove_tags, #copybot_copy_content, #copybot_linebreak_fix, #copybot_save_txt').prop('disabled', false);
+                        console.log('깡갤 복사기: 텍스트박스에 내용 표시 완료');
                     }
-                }, 2000);
-            } else {
-                toastr.error('채팅 입력창을 찾을 수 없습니다.');
-                console.error('깡갤 복사기: #send_textarea 요소를 찾을 수 없음');
-            }
+                } catch (error) {
+                    console.log('깡갤 복사기: 클립보드 읽기 실패 (권한 문제일 수 있음)', error);
+                }
+            }, 2000);
         } catch (error) {
             console.error('깡갤 복사기 오류:', error);
             toastr.error('메시지 복사 중 오류가 발생했습니다.');
-        }
-    }
-
-    // 메시지 이동 명령 실행 함수
-    async function executeJumpCommand(messageNumber) {
-        try {
-            const command = `/chat-jump ${messageNumber}`;
-            console.log(`깡갤 복사기: 실행 중인 이동 명령어 - ${command}`);
-            const chatInput = $('#send_textarea');
-            if (chatInput.length > 0) {
-                const originalText = chatInput.val();
-                chatInput.val(command);
-                chatInput.trigger('input');
-                setTimeout(() => {
-                    $('#send_but').click();
-                    setTimeout(() => {
-                        if (originalText) {
-                            chatInput.val(originalText);
-                        }
-                    }, 500);
-                }, 100);
-                toastr.success(messageNumber === '{{lastMessageId}}' ? '마지막 메시지로 이동!' : `메시지 #${messageNumber}로 이동!`);
-            } else {
-                toastr.error('채팅 입력창을 찾을 수 없습니다.');
-                console.error('깡갤 복사기: #send_textarea 요소를 찾을 수 없음');
-            }
-        } catch (error) {
-            console.error('깡갤 복사기 이동 오류:', error);
-            toastr.error('메시지 이동 중 오류가 발생했습니다.');
         }
     }
 
@@ -456,187 +575,162 @@
         }
     }
 
-    // 설정 상태에 따라 동적 버튼을 업데이트하는 함수 (고정 순서로 정렬)
+    // 설정 상태에 따라 동적 버튼을 업데이트하는 함수
     function updateActionButtons() {
         const container = $('#copybot_action_buttons');
-        
-        // 기존 버튼들 모두 제거
         container.empty();
         
-        // 고정 순서로 버튼 정의 (아이콘과 동일한 순서)
         const actionItems = [
             { toggleId: 'copybot_tag_remove_toggle', checkboxId: 'copybot_tag_remove_button', buttonId: 'copybot_action_remove_tags', buttonText: '작성중 태그제거' },
             { toggleId: 'copybot_delete_toggle', checkboxId: 'copybot_delete_button', buttonId: 'copybot_action_delete_last', buttonText: '마지막 메세지 삭제' },
             { toggleId: 'copybot_delete_regenerate_toggle', checkboxId: 'copybot_delete_regenerate_button', buttonId: 'copybot_action_delete_regen', buttonText: '삭제후 재생성' }
         ];
 
-        // 고정 순서대로 버튼 생성
         actionItems.forEach(item => {
-            const isToggleOn = $(`#${item.toggleId}`).attr('data-enabled') === 'true';
-            const isButtonChecked = $(`#${item.checkboxId}`).is(':checked');
-
-            if (isToggleOn && isButtonChecked) {
+            if ($(`#${item.toggleId}`).attr('data-enabled') === 'true' && $(`#${item.checkboxId}`).is(':checked')) {
                 container.append(`<button id="${item.buttonId}" class="copybot_action_button">${item.buttonText}</button>`);
             }
         });
     }
 
-    // 입력 필드 아이콘들을 관리하는 함수
+    // 통합 아이콘 관리 함수
     function updateInputFieldIcons() {
         try {
-            // 기존 아이콘들 제거
-            document.querySelectorAll('.copybot_input_field_icon').forEach(icon => icon.remove());
+            document.querySelectorAll('.copybot_input_field_icon, .copybot_independent_container').forEach(el => el.remove());
+
+            const rightSendForm = document.querySelector('#rightSendForm');
+            const textarea = document.querySelector('#send_textarea');
+            const leftSendForm = document.querySelector('#leftSendForm');
+
+            if (leftSendForm) { 
+                leftSendForm.style.flexWrap = ''; 
+                leftSendForm.style.maxWidth = '';
+                Array.from(leftSendForm.children).forEach(child => {
+                    if (!child.classList.contains('copybot_input_field_icon')) child.style.order = '';
+                });
+            }
             
-            const rightForm = document.querySelector('#rightSendForm');
-            if (!rightForm) {
-                console.log('깡갤 복사기: #rightSendForm을 찾을 수 없음');
-                return;
-            }
+            const referenceIcon = document.querySelector('#send_but');
+            if (!referenceIcon) return;
 
-            const sendButton = rightForm.querySelector('#send_but');
-            if (!sendButton) {
-                console.log('깡갤 복사기: #send_but을 찾을 수 없음');
-                return;
-            }
+            const computedStyle = window.getComputedStyle(referenceIcon);
+            const themeIconSize = computedStyle.fontSize;
+            const themeIconColor = computedStyle.color;
 
-            // 아이콘 설정 정보
-            const iconItems = [
-                { 
-                    toggleId: 'copybot_tag_remove_toggle', 
-                    checkboxId: 'copybot_tag_remove_icon', 
-                    iconClass: 'fa-tags', 
-                    iconId: 'copybot_input_tag_remove',
-                    title: '작성중인 메시지의 태그 제거',
-                    action: () => removeTagsFromElement('#send_textarea')
-                },
-                { 
-                    toggleId: 'copybot_delete_toggle', 
-                    checkboxId: 'copybot_delete_icon', 
-                    iconClass: 'fa-trash', 
-                    iconId: 'copybot_input_delete',
-                    title: '마지막 메시지 삭제',
-                    action: () => executeSimpleCommand('/del 1', '마지막 메시지 1개를 삭제했습니다.')
-                },
-                { 
-                    toggleId: 'copybot_delete_regenerate_toggle', 
-                    checkboxId: 'copybot_delete_regenerate_icon', 
-                    iconClass: 'fa-redo', 
-                    iconId: 'copybot_input_delete_regen',
-                    // ⭐️ [수정] 사용자에게 캐시 우회 기능임을 알려주는 툴팁
-                    title: '마지막 메시지 삭제 후 재생성 (캐시 우회)',
-                    // ⭐️ [수정] 캐시 우회 함수를 호출하도록 변경
-                    action: () => executeSimpleCommand('/del 1', '마지막 메시지를 삭제하고 재생성합니다.', triggerCacheBustRegeneration)
-                }
+            const iconsByPosition = { right: [], left: [], bottom_right: [], bottom_left: [] };
+
+            const allIconItems = [
+                { type: 'ghostwrite', toggleId: 'copybot_ghostwrite_toggle', iconClass: 'fa-user-edit', title: '캐릭터에게 대필 요청', action: executeGhostwrite, group: 20 },
+                { type: 'action', toggleId: 'copybot_tag_remove_toggle', iconClass: 'fa-tags', title: '작성중인 메시지의 태그 제거', action: () => removeTagsFromElement('#send_textarea'), group: 20 },
+                { type: 'action', toggleId: 'copybot_delete_toggle', iconClass: 'fa-trash', title: '마지막 메시지 삭제', action: () => executeSimpleCommand('/del 1', '마지막 메시지 1개를 삭제했습니다.'), group: 20 },
+                { type: 'action', toggleId: 'copybot_delete_regenerate_toggle', iconClass: 'fa-redo', title: '마지막 메시지 삭제 후 재생성', action: () => executeSimpleCommand('/del 1', '마지막 메시지를 삭제하고 재생성합니다.', triggerCacheBustRegeneration), group: 30 }
             ];
 
-            // 설정에 따라 아이콘 생성
-            iconItems.forEach(item => {
+            allIconItems.forEach(item => {
                 const isToggleOn = $(`#${item.toggleId}`).attr('data-enabled') === 'true';
-                const isIconChecked = $(`#${item.checkboxId}`).is(':checked');
+                const isIconChecked = item.type === 'ghostwrite' ? true : $(`#${item.toggleId.replace('toggle', 'icon')}`).is(':checked');
 
                 if (isToggleOn && isIconChecked) {
+                    const positionName = item.type === 'ghostwrite' ? 'copybot_ghostwrite_position' : 'copybot_position';
+                    const targetPosition = $(`input[name="${positionName}"]:checked`).val() || 'right';
+                    
                     const icon = document.createElement('div');
-                    icon.id = item.iconId;
-                    icon.className = `fa-solid ${item.iconClass} interactable copybot_input_field_icon`;
+                    icon.className = `fa-solid ${item.iconClass} copybot_input_field_icon`;
                     icon.title = item.title;
+                    icon.style.fontSize = themeIconSize;
+                    icon.style.color = themeIconColor;
+                    icon.style.order = item.group;
+                    icon.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); item.action(); });
                     
-                    // SillyTavern 기존 아이콘과 동일한 스타일 적용
-                    icon.style.cssText = `
-                        font-size: 28.5px;
-                        color: #ebebeb;
-                        cursor: pointer;
-                        margin: 0 2px;
-                        padding: 0px;
-                        transition: all 0.2s ease;
-                    `;
-                    
-                    // 호버 효과
-                    icon.addEventListener('mouseenter', () => {
-                        icon.style.color = '#fff';
-                        icon.style.opacity = '0.8';
-                    });
-                    icon.addEventListener('mouseleave', () => {
-                        icon.style.color = '#ebebeb';
-                        icon.style.opacity = '1';
-                    });
-                    
-                    // 클릭 이벤트
-                    icon.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        try {
-                            item.action();
-                        } catch (error) {
-                            console.error('깡갤 복사기: 입력 필드 아이콘 클릭 오류', error);
-                            toastr.error('기능 실행 중 오류가 발생했습니다.');
-                        }
-                    });
-                    
-                    // send_but 앞에 삽입
-                    rightForm.insertBefore(icon, sendButton);
-                    console.log(`깡갤 복사기: ${item.title} 아이콘 추가됨`);
+                    iconsByPosition[targetPosition].push(icon);
                 }
             });
 
+            for (const position in iconsByPosition) {
+                const iconsToAdd = iconsByPosition[position];
+                if (iconsToAdd.length === 0) continue;
+
+                switch(position) {
+                    case 'bottom_left':
+                    case 'left':
+                    case 'right':
+                        iconsToAdd.forEach(icon => icon.classList.add('interactable'));
+                        if (position === 'bottom_left' && leftSendForm) {
+                            Array.from(leftSendForm.children).forEach(child => { child.style.order = '10'; });
+                            const originalWidth = leftSendForm.getBoundingClientRect().width;
+                            if (originalWidth > 0) leftSendForm.style.maxWidth = `${originalWidth}px`;
+                            leftSendForm.style.flexWrap = 'wrap';
+                            iconsToAdd.forEach(icon => leftSendForm.appendChild(icon));
+                        } else if (position === 'left' && leftSendForm) {
+                            iconsToAdd.forEach(icon => { icon.style.order = ''; leftSendForm.appendChild(icon); });
+                        } else if (position === 'right' && rightSendForm) {
+                            const sendButton = rightSendForm.querySelector('#send_but');
+                            if (sendButton) iconsToAdd.forEach(icon => { icon.style.order = ''; rightSendForm.insertBefore(icon, sendButton); });
+                        }
+                        break;
+                    
+                    case 'bottom_right':
+                        const textareaParent = textarea.closest('#send_form') || textarea.parentElement;
+                        if (textareaParent) {
+                            const { r, g, b } = rgbStringToObj(themeIconColor);
+                            const { h, s } = rgbToHsl(r, g, b);
+                            const hoverColor = `hsl(${h}, ${s}%, 35%)`;
+                            const activeColor = `hsl(${h}, ${s}%, 25%)`;
+                            
+                            let iconSize = Math.max(referenceIcon.offsetWidth, referenceIcon.offsetHeight, 32);
+                            const minimalOffset = (iconSize * 2) + 8 - 10;
+                            const independentContainer = document.createElement('div');
+                            independentContainer.className = 'copybot_independent_container';
+                            
+                            iconsToAdd.forEach(icon => {
+                                icon.style.margin = '0 3px';
+                                icon.style.transition = 'color 0.2s ease';
+                                icon.addEventListener('mouseenter', () => { icon.style.color = hoverColor; });
+                                icon.addEventListener('mouseleave', () => { icon.style.color = themeIconColor; });
+                                icon.addEventListener('mousedown', () => { icon.style.color = activeColor; });
+                                icon.addEventListener('mouseup', () => { icon.style.color = hoverColor; });
+                                independentContainer.appendChild(icon);
+                            });
+                            
+                            textareaParent.style.position = 'relative';
+                            independentContainer.style.cssText = `position:absolute!important;top:0!important;right:${minimalOffset}px!important;transform:translateY(calc(-100% - 4px))!important;display:flex!important;gap:6px!important;align-items:center!important;background:rgba(var(--bg-color-rgb),0.8)!important;backdrop-filter:blur(5px)!important;border-radius:6px!important;padding:4px 8px!important;border:1px solid var(--border-color)!important;box-shadow:0 2px 8px rgba(0,0,0,0.15)!important;z-index:1000!important;`;
+                            textareaParent.appendChild(independentContainer);
+                        }
+                        break;
+                }
+            }
+            console.log('깡갤 복사기: 아이콘 업데이트 완료');
         } catch (error) {
             console.error('깡갤 복사기: 입력 필드 아이콘 업데이트 실패', error);
         }
     }
 
-    // UI 이벤트 설정 함수
+
+    // ⭐️ UI 이벤트 설정 함수 (리스너 중복 방지 강화)
     function setupEventHandlers() {
         console.log('깡갤 복사기: 이벤트 핸들러 설정 시작');
         
-        $(document).off('click', '#copybot_execute').on('click', '#copybot_execute', function() {
-            const startPos = parseInt($("#copybot_start").val());
-            const endPos = parseInt($("#copybot_end").val());
-            if (isNaN(startPos) || isNaN(endPos)) { toastr.error('올바른 숫자를 입력해주세요.'); return; }
-            if (startPos > endPos) { toastr.error('시작위치는 종료위치보다 작아야 합니다.'); return; }
-            if (startPos < 0) { toastr.error('시작위치는 0 이상이어야 합니다.'); return; }
-            executeCopyCommand(startPos, endPos);
-        });
-        
-        $(document).off('click', '#copybot_linebreak_fix').on('click', '#copybot_linebreak_fix', function() {
-            try {
+        const eventMap = {
+            '#copybot_execute': () => {
+                const startPos = parseInt($("#copybot_start").val());
+                const endPos = parseInt($("#copybot_end").val());
+                if (isNaN(startPos) || isNaN(endPos)) { toastr.error('올바른 숫자를 입력해주세요.'); return; }
+                if (startPos > endPos) { toastr.error('시작위치는 종료위치보다 작아야 합니다.'); return; }
+                if (startPos < 0) { toastr.error('시작위치는 0 이상이어야 합니다.'); return; }
+                executeCopyCommand(startPos, endPos);
+            },
+            '#copybot_linebreak_fix': () => {
                 const textbox = $('#copybot_textbox');
                 const currentText = textbox.val();
-                if (!currentText.trim()) {
-                    toastr.warning('텍스트박스에 내용이 없습니다.');
-                    return;
-                }
-
-                console.log('깡갤 복사기: 줄바꿈 정리 시작, 원본 길이:', currentText.length);
-
-                let cleanedText = currentText;
-                // 연속된 줄바꿈을 최대 2개로 제한
-                cleanedText = cleanedText.replace(/\n{3,}/g, '\n\n');
-                // 앞뒤 공백 제거
-                cleanedText = cleanedText.trim();
-
-                console.log('깡갤 복사기: 줄바꿈 정리 완료, 최종 길이:', cleanedText.length);
-                textbox.val(cleanedText);
-                textbox.trigger('input');
-
-                if (cleanedText.length !== currentText.length) {
-                    const difference = Math.abs(currentText.length - cleanedText.length);
-                    toastr.success(`줄바꿈 정리 완료! (${difference}자 변경됨)`);
-                } else {
-                    toastr.info('정리할 내용이 없습니다.');
-                }
-            } catch (error) {
-                console.error('깡갤 복사기: 줄바꿈 정리 실패', error);
-                toastr.error('줄바꿈 정리 중 오류가 발생했습니다.');
-            }
-        });
-
-        $(document).off('click', '#copybot_save_txt').on('click', '#copybot_save_txt', function() {
-            try {
+                if (!currentText.trim()) { toastr.warning('텍스트박스에 내용이 없습니다.'); return; }
+                const cleanedText = currentText.replace(/\n{3,}/g, '\n\n').trim();
+                textbox.val(cleanedText).trigger('input');
+                if (cleanedText.length !== currentText.length) toastr.success(`줄바꿈 정리 완료!`);
+                else toastr.info('정리할 내용이 없습니다.');
+            },
+            '#copybot_save_txt': () => {
                 const textboxContent = $('#copybot_textbox').val();
-                if (!textboxContent.trim()) {
-                    toastr.warning('저장할 내용이 없습니다.');
-                    return;
-                }
-
+                if (!textboxContent.trim()) { toastr.warning('저장할 내용이 없습니다.'); return; }
                 const blob = new Blob([textboxContent], { type: 'text/plain;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -646,91 +740,79 @@
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-
                 toastr.success('txt 파일로 저장되었습니다!');
-                console.log('깡갤 복사기: txt 파일 저장 완료');
-            } catch (error) {
-                console.error('깡갤 복사기: txt 저장 실패', error);
-                toastr.error('파일 저장 중 오류가 발생했습니다.');
+            },
+            '#copybot_remove_tags': () => removeTagsFromElement('#copybot_textbox'),
+            '#copybot_copy_content': copyTextboxContent,
+            '#copybot_jump_first': () => {
+                if (confirm("첫 메시지로 이동합니다.\n\n누적된 채팅이 많을 경우 심한 렉에 걸리거나 튕길 수 있습니다.\n\n정말 이동하시겠습니까?\n실수로 누른 거라면 '취소'를 눌러주세요.")) {
+                    executeSimpleCommand('/chat-jump 0', '첫 메시지로 이동!');
+                } else {
+                    toastr.info('이동이 취소되었습니다.');
+                }
+            },
+            '#copybot_jump_last': () => executeSimpleCommand('/chat-jump {{lastMessageId}}', '마지막 메시지로 이동!'),
+            '#copybot_jump_to': () => {
+                const jumpNumber = parseInt($("#copybot_jump_number").val());
+                if (isNaN(jumpNumber) || jumpNumber < 0) { toastr.error('올바른 메시지 번호를 입력해주세요.'); return; }
+                executeSimpleCommand(`/chat-jump ${jumpNumber}`, `메시지 #${jumpNumber}로 이동!`);
+            },
+            '#copybot_open_ghostwrite_button': (e) => {
+                e.stopPropagation();
+                $('#copybot_settings_panel').slideUp(200);
+                $('#copybot_ghostwrite_panel').slideToggle(200, saveSettings);
+            },
+            '#copybot_open_settings_button': (e) => {
+                e.stopPropagation();
+                $('#copybot_ghostwrite_panel').slideUp(200);
+                $('#copybot_settings_panel').slideToggle(200, () => {
+                    saveSettings();
+                    toastr.success('설정이 저장되었습니다.');
+                });
+            },
+            '.copybot_toggle_button': function(e) {
+                e.stopPropagation();
+                const button = $(this);
+                const isEnabled = button.attr('data-enabled') === 'true';
+                button.attr('data-enabled', !isEnabled).text(isEnabled ? 'OFF' : 'ON');
+                const targetPanel = button.attr('id') === 'copybot_ghostwrite_toggle'
+                    ? $('#copybot_ghostwrite_position_options, #copybot_ghostwrite_textbox, #copybot_ghostwrite_panel .copybot_description')
+                    : $(`#${button.attr('id').replace('_toggle', '_options')}`);
+                targetPanel.slideToggle(!isEnabled);
+                updateActionButtons();
+                updateInputFieldIcons();
+                saveSettings();
+            },
+            '.copybot_action_button': function() {
+                const actions = {
+                    'copybot_action_remove_tags': () => removeTagsFromElement('#send_textarea'),
+                    'copybot_action_delete_last': () => executeSimpleCommand('/del 1', '마지막 메시지 1개를 삭제했습니다.'),
+                    'copybot_action_delete_regen': () => executeSimpleCommand('/del 1', '마지막 메시지를 삭제하고 재생성합니다.', triggerCacheBustRegeneration)
+                };
+                actions[$(this).attr('id')]?.();
             }
-        });
+        };
 
-        $(document).off('click', '#copybot_remove_tags').on('click', '#copybot_remove_tags', () => removeTagsFromElement('#copybot_textbox'));
+        for (const selector in eventMap) {
+            $(document).off('click', selector).on('click', selector, eventMap[selector]);
+        }
+
+        $(document).off('keypress', '#copybot_start, #copybot_end').on('keypress', '#copybot_start, #copybot_end', (e) => { if(e.which === 13) $('#copybot_execute').click(); });
+        $(document).off('keypress', '#copybot_jump_number').on('keypress', '#copybot_jump_number', (e) => { if(e.which === 13) $('#copybot_jump_to').click(); });
         
-        $(document).off('click', '#copybot_copy_content').on('click', '#copybot_copy_content', copyTextboxContent);
-        $(document).off('keypress', '#copybot_start, #copybot_end').on('keypress', '#copybot_start, #copybot_end', function(e) { if (e.which === 13) $("#copybot_execute").click(); });
-        $(document).off('focus', '#copybot_textbox').on('focus', '#copybot_textbox', function() { $(this).prop('readonly', false); });
         $(document).off('input', '#copybot_textbox').on('input', '#copybot_textbox', function() {
             const hasContent = $(this).val().trim().length > 0;
             $('#copybot_copy_content, #copybot_remove_tags, #copybot_linebreak_fix, #copybot_save_txt').prop('disabled', !hasContent);
         });
 
-        $(document).off('click', '#copybot_jump_first').on('click', '#copybot_jump_first', function() {
-            if (confirm("첫 메시지로 이동합니다.\n\n누적된 채팅이 많을 경우 심한 렉에 걸리거나 튕길 수 있습니다.\n\n정말 이동하시겠습니까?\n실수로 누른 거라면 '취소'를 눌러주세요.")) {
-                executeJumpCommand(0);
-            } else {
-                toastr.info('이동이 취소되었습니다.');
-            }
-        });
-        $(document).off('click', '#copybot_jump_last').on('click', '#copybot_jump_last', () => executeJumpCommand('{{lastMessageId}}'));
-        $(document).off('click', '#copybot_jump_to').on('click', '#copybot_jump_to', function() {
-            const jumpNumber = parseInt($("#copybot_jump_number").val());
-            if (isNaN(jumpNumber)) { toastr.error('올바른 메시지 번호를 입력해주세요.'); return; }
-            if (jumpNumber < 0) { toastr.error('메시지 번호는 0 이상이어야 합니다.'); return; }
-            executeJumpCommand(jumpNumber);
-        });
-        $(document).off('keypress', '#copybot_jump_number').on('keypress', '#copybot_jump_number', function(e) { if (e.which === 13) $("#copybot_jump_to").click(); });
-
-        $(document).off('click', '#copybot_open_settings_button').on('click', '#copybot_open_settings_button', function(e) {
-            e.stopPropagation();
-            const settingsPanel = $('#copybot_settings_panel');
-            if (settingsPanel.is(':visible')) {
-                settingsPanel.slideUp(200, () => {
-                    saveSettings();
-                    toastr.success('설정이 저장되었습니다.');
-                });
-            } else {
-                settingsPanel.slideDown(200);
-            }
-        });
-
-        $(document).off('click', '.copybot_toggle_button').on('click', '.copybot_toggle_button', function(e) {
-            e.stopPropagation();
-            const button = $(this);
-            const isEnabled = button.attr('data-enabled') === 'true';
-            button.attr('data-enabled', !isEnabled).text(isEnabled ? 'OFF' : 'ON');
-            const optionsPanelId = `#${button.attr('id').replace('_toggle', '_options')}`;
-            $(optionsPanelId).slideToggle(!isEnabled);
+        $(document).off('change', '.copybot_checkbox, .copybot_radio').on('change', '.copybot_checkbox, .copybot_radio', () => {
             updateActionButtons();
-            updateInputFieldIcons(); // 입력 필드 아이콘도 업데이트
-            saveSettings(); // 설정 변경시 자동 저장
-        });
-
-        $(document).off('change', '.copybot_checkbox').on('change', '.copybot_checkbox', function(e) {
-            e.stopPropagation();
-            updateActionButtons();
-            updateInputFieldIcons(); // 입력 필드 아이콘도 업데이트
-            saveSettings(); // 설정 변경시 자동 저장
+            updateInputFieldIcons();
+            saveSettings();
         });
         
-        $(document).off('click', '#copybot_settings_panel').on('click', '#copybot_settings_panel', (e) => e.stopPropagation());
-        
-        // 동적으로 생성된 액션 버튼들의 클릭 이벤트 핸들러
-        $(document).on('click', '.copybot_action_button', function() {
-            const buttonId = $(this).attr('id');
-            switch (buttonId) {
-                case 'copybot_action_remove_tags':
-                    removeTagsFromElement('#send_textarea');
-                    break;
-                case 'copybot_action_delete_last':
-                    executeSimpleCommand('/del 1', '마지막 메시지 1개를 삭제했습니다.');
-                    break;
-                case 'copybot_action_delete_regen':
-                    // ⭐️ [수정] 캐시 우회 함수를 호출하도록 변경
-                    executeSimpleCommand('/del 1', '마지막 메시지를 삭제하고 재생성합니다.', triggerCacheBustRegeneration);
-                    break;
-            }
-        });
+        $(document).off('input', '#copybot_ghostwrite_textbox').on('input', saveSettings);
+        $(document).off('click', '#copybot_settings_panel, #copybot_ghostwrite_panel').on('click', (e) => e.stopPropagation());
 
         console.log('깡갤 복사기: 이벤트 핸들러 설정 완료');
     }
@@ -746,11 +828,10 @@
                 console.log('깡갤 복사기: UI 추가 성공');
                 setupEventHandlers();
                 
-                // 설정 로드 및 UI 업데이트
                 setTimeout(() => {
                     loadSettings();
                     updateActionButtons();
-                    updateInputFieldIcons(); // 입력 필드 아이콘도 초기화
+                    updateInputFieldIcons();
                 }, 100);
                 
                 console.log('깡갤 복사기: ✅ 초기화 완료!');
@@ -767,7 +848,7 @@
         console.log('깡갤 복사기: DOM 준비 완료');
         setTimeout(initialize, 1000);
         $(document).on('characterSelected chat_render_complete CHAT_CHANGED', () => {
-            setTimeout(() => { if (!isInitialized) initialize(); }, 500);
+            setTimeout(() => { if (!isInitialized) initialize(); updateInputFieldIcons(); }, 500);
         });
         $(document).on('change', '#character_select', () => {
             setTimeout(() => { if (!isInitialized) initialize(); }, 200);
