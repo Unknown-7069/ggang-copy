@@ -1,6 +1,13 @@
 // 깡갤 복사기 확장프로그램
 // SillyTavern용 자동 메시지 복사 도구
 
+/* 
+디버깅로그:
+- 2025.07.08: {{ }} 템플릿 구문 제거 기능 추가 요청
+- removeTagsFromElement 함수에 {{ }} 패턴 제거 로직 추가
+- 기존 HTML 태그 제거 기능은 유지하면서 템플릿 구문도 함께 제거
+*/
+
 (function() {
     'use strict';
 
@@ -528,7 +535,7 @@
         }
     }
 
-    // 특정 element에서 태그를 제거하는 범용 함수
+    // 특정 element에서 태그를 제거하는 범용 함수 ({{ }} 템플릿 구문 제거 기능 추가)
     function removeTagsFromElement(selector) {
         try {
             const targetElement = $(selector);
@@ -548,6 +555,8 @@
             let cleanedText = currentText;
             let iterationCount = 0;
             const maxIterations = 10;
+            
+            // HTML 태그 제거
             while (iterationCount < maxIterations) {
                 const previousText = cleanedText;
                 cleanedText = cleanedText.replace(/<([^>\/\s]+)(?:\s[^>]*)?>[\s\S]*?<\/\1>/g, '');
@@ -556,18 +565,22 @@
             }
 
             cleanedText = cleanedText.replace(/<[^>]*>/g, '');
+            
+            // {{ }} 템플릿 구문 제거 추가
+            cleanedText = cleanedText.replace(/\{\{.*?\}\}/g, '');
+            
             cleanedText = cleanedText.replace(/\n\s*\n\s*\n/g, '\n\n');
             cleanedText = cleanedText.trim();
 
-            console.log(`깡갤 복사기: 태그 제거 완료, 최종 길이:`, cleanedText.length);
+            console.log(`깡갤 복사기: 태그 및 템플릿 구문 제거 완료, 최종 길이:`, cleanedText.length);
             targetElement.val(cleanedText);
             targetElement.trigger('input');
 
             if (cleanedText.length < currentText.length) {
                 const removedChars = currentText.length - cleanedText.length;
-                toastr.success(`태그 제거 완료! (${removedChars}자 제거됨)`);
+                toastr.success(`태그 및 템플릿 구문 제거 완료! (${removedChars}자 제거됨)`);
             } else {
-                toastr.info('제거할 태그가 없습니다.');
+                toastr.info('제거할 태그나 템플릿 구문이 없습니다.');
             }
         } catch (error) {
             console.error('깡갤 복사기: 태그 제거 실패', error);
