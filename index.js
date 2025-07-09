@@ -1,13 +1,6 @@
 // 깡갤 복사기 확장프로그램
 // SillyTavern용 자동 메시지 복사 도구
 
-/* 
-디버깅로그:
-- 2025.07.08: {{ }} 템플릿 구문 제거 기능 추가 요청
-- removeTagsFromElement 함수에 {{ }} 패턴 제거 로직 추가
-- 기존 HTML 태그 제거 기능은 유지하면서 템플릿 구문도 함께 제거
-*/
-
 (function() {
     'use strict';
 
@@ -79,7 +72,7 @@
                     
                     <!-- 결과 섹션 -->
                     <div class="copybot_section">
-                        <textarea id="copybot_textbox" placeholder="복사된 내용이 여기에 표시됩니다..." readonly></textarea>
+                        <textarea id="copybot_textbox" placeholder="복사된 내용이 여기에 표시됩니다..."></textarea>
                         
                         <div class="copybot_textbox_buttons">
                             <button id="copybot_remove_tags" class="copybot_textbox_button" title="텍스트박스에서 태그 제거" disabled>
@@ -324,8 +317,7 @@
         }
     }
 
-
-    // 설정 저장 함수
+    // 설정 저장 함수 강화
     function saveSettings() {
         try {
             const settings = {
@@ -351,17 +343,48 @@
                     icon: $('#copybot_delete_regenerate_icon').is(':checked')
                 }
             };
+            
+            // 다중 백업 저장으로 설정 유지 강화
             localStorage.setItem('copybot_settings', JSON.stringify(settings));
+            localStorage.setItem('copybot_settings_backup', JSON.stringify(settings));
+            sessionStorage.setItem('copybot_settings_temp', JSON.stringify(settings));
+            
             console.log('깡갤 복사기: 설정 저장 완료', settings);
+            return true;
         } catch (error) {
             console.error('깡갤 복사기: 설정 저장 실패', error);
+            return false;
         }
     }
 
-    // ⭐️ 설정 로드 함수 (대필 UI 제어 로직 수정)
+    // 설정 로드 함수 강화
     function loadSettings() {
         try {
-            const savedSettings = localStorage.getItem('copybot_settings');
+            // 다중 소스에서 설정 복구 시도
+            let savedSettings = null;
+            
+            try {
+                savedSettings = localStorage.getItem('copybot_settings');
+            } catch (e) {
+                console.warn('깡갤 복사기: localStorage에서 설정 로드 실패, 백업에서 시도');
+            }
+            
+            if (!savedSettings) {
+                try {
+                    savedSettings = localStorage.getItem('copybot_settings_backup');
+                } catch (e) {
+                    console.warn('깡갤 복사기: 백업에서도 설정 로드 실패, sessionStorage에서 시도');
+                }
+            }
+            
+            if (!savedSettings) {
+                try {
+                    savedSettings = sessionStorage.getItem('copybot_settings_temp');
+                } catch (e) {
+                    console.warn('깡갤 복사기: sessionStorage에서도 설정 로드 실패');
+                }
+            }
+            
             if (!savedSettings) {
                 console.log('깡갤 복사기: 저장된 설정이 없음');
                 return;
@@ -407,8 +430,7 @@
             if (settings.deleteRegenerate.enabled) $('#copybot_delete_regenerate_options').show(); else $('#copybot_delete_regenerate_options').hide();
             
             console.log('깡갤 복사기: 설정 로드 완료');
-        } catch (error)
-        {
+        } catch (error) {
             console.error('깡갤 복사기: 설정 로드 실패', error);
         }
     }
@@ -718,8 +740,7 @@
         }
     }
 
-
-    // ⭐️ UI 이벤트 설정 함수 (리스너 중복 방지 강화)
+    // UI 이벤트 설정 함수 (리스너 중복 방지 강화)
     function setupEventHandlers() {
         console.log('깡갤 복사기: 이벤트 핸들러 설정 시작');
         
@@ -773,14 +794,17 @@
             '#copybot_open_ghostwrite_button': (e) => {
                 e.stopPropagation();
                 $('#copybot_settings_panel').slideUp(200);
-                $('#copybot_ghostwrite_panel').slideToggle(200, saveSettings);
+                $('#copybot_ghostwrite_panel').slideToggle(200, () => {
+                    saveSettings();
+                    toastr.success('대필 설정이 저장되었습니다.');
+                });
             },
             '#copybot_open_settings_button': (e) => {
                 e.stopPropagation();
                 $('#copybot_ghostwrite_panel').slideUp(200);
                 $('#copybot_settings_panel').slideToggle(200, () => {
                     saveSettings();
-                    toastr.success('설정이 저장되었습니다.');
+                    toastr.success('편의기능 설정이 저장되었습니다.');
                 });
             },
             '.copybot_toggle_button': function(e) {
@@ -824,7 +848,7 @@
             saveSettings();
         });
         
-        $(document).off('input', '#copybot_ghostwrite_textbox').on('input', saveSettings);
+        $(document).off('input', '#copybot_ghostwrite_textbox').on('input', '#copybot_ghostwrite_textbox', saveSettings);
         $(document).off('click', '#copybot_settings_panel, #copybot_ghostwrite_panel').on('click', (e) => e.stopPropagation());
 
         console.log('깡갤 복사기: 이벤트 핸들러 설정 완료');
