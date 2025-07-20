@@ -158,7 +158,20 @@
                                     </div>
                                 </div>
                                 <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666; display:none;">
-                                    대필 아이콘(<i class="fa-solid fa-user-edit"></i>)을 누르면, 위에 써진 내용(프롬프트)와 채팅창의 내용을 조합하여 사용자를 대신해 봇이 글을 써줍니다. (비어있는 곳은 알아서 무시합니다)
+                                    대필 아이콘(<i class="fa-solid fa-user-edit"></i>)을 누르면, 위에 써진 내용(프롬프트)와 채팅창에 적힌 대필 지시문의 내용을 조합하여 사용자를 대신해 봇이 글을 써줍니다. (비어있는 곳은 알아서 무시합니다)
+                                </div>
+                            </div>
+                            
+                            <div class="copybot_settings_item">
+                                <div class="copybot_settings_main">
+                                    <span class="copybot_settings_label">임시 대필칸 사용</span>
+                                    <button id="copybot_temp_field_toggle" class="copybot_toggle_button" data-enabled="true">
+                                        ON
+                                    </button>
+                                </div>
+                                <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666;">
+                                    체크하면 대필 전용칸이 생기고 기본 입력창 내용은 무시됩니다.<br>
+                                    체크 해제시 기본 입력창에 쓴 내용을 대필 지시문으로 사용합니다.
                                 </div>
                             </div>
                         </div>
@@ -269,7 +282,7 @@
         </div>
     </div>`;
 
-    // 캐시 우회를 위한 새로운 재생성 함수
+    // 캐시 우회를 위한 새로운 재생성 함수 (토스트 메시지 제거)
     function triggerCacheBustRegeneration() {
         console.log('깡갤 복사기: 캐시 우회 재생성 시작...');
         try {
@@ -301,7 +314,8 @@
             chat[lastUserMessageIndex].mes = `${originalMessage}\n${nonce}`;
             console.log('깡갤 복사기: Nonce가 추가된 임시 메시지로 재생성 요청');
 
-            executeSimpleCommand('/trigger', '캐시를 우회하여 재생성합니다.', () => {
+            // 토스트 메시지 제거됨 (중복 방지)
+            executeSimpleCommand('/trigger', '', () => {
                 setTimeout(() => {
                     const currentChat = window.SillyTavern.getContext().chat;
                     if (currentChat[lastUserMessageIndex] && currentChat[lastUserMessageIndex].mes.includes(nonce)) {
@@ -325,7 +339,8 @@
                 ghostwrite: {
                     enabled: $('#copybot_ghostwrite_toggle').attr('data-enabled') === 'true',
                     text: $('#copybot_ghostwrite_textbox').val() || '',
-                    position: $('input[name="copybot_ghostwrite_position"]:checked').val() || 'right'
+                    position: $('input[name="copybot_ghostwrite_position"]:checked').val() || 'right',
+                    useTempField: $('#copybot_temp_field_toggle').attr('data-enabled') === 'true'
                 },
                 tagRemove: {
                     enabled: $('#copybot_tag_remove_toggle').attr('data-enabled') === 'true',
@@ -405,6 +420,10 @@
                     $(`input[name="copybot_ghostwrite_position"][value="${settings.ghostwrite.position}"]`).prop('checked', true);
                 }
                 
+                // 임시 대필칸 사용 설정 로드
+                const useTempField = settings.ghostwrite.useTempField !== undefined ? settings.ghostwrite.useTempField : true;
+                $('#copybot_temp_field_toggle').attr('data-enabled', useTempField).text(useTempField ? 'ON' : 'OFF');
+                
                 // 토글 상태에 따라 모든 관련 UI를 제어
                 const ghostwriteElements = $('#copybot_ghostwrite_position_options, #copybot_ghostwrite_panel .copybot_description, #copybot_ghostwrite_textbox');
                 if (isGhostwriteEnabled) {
@@ -435,38 +454,292 @@
         }
     }
     
-    // 대필 명령 실행 함수
-    function executeGhostwrite() {
+    // 임시 프롬프트 창 스타일 업데이트 함수
+    function updateTempPromptStyle() {
+        try {
+            const tempPromptInput = document.querySelector('#copybot_temp_prompt');
+            const sendTextarea = document.querySelector('#send_textarea');
+            
+            if (!tempPromptInput || !sendTextarea) return;
+            
+            // send_textarea의 최신 스타일 가져오기
+            const originalStyles = window.getComputedStyle(sendTextarea);
+            tempPromptInput.style.cssText = `
+                width: 100%;
+                border: ${originalStyles.border};
+                border-top: none;
+                border-radius: 0 0 5px 5px;
+                background: ${originalStyles.backgroundColor};
+                color: ${originalStyles.color};
+                font-family: ${originalStyles.fontFamily};
+                font-size: ${originalStyles.fontSize};
+                padding: ${originalStyles.padding};
+                resize: vertical;
+                min-height: 35px;
+                max-height: 100px;
+                box-sizing: border-box;
+                outline: none;
+                margin: 0;
+            `;
+            
+            console.log('깡갤 복사기: 임시 프롬프트 창 스타일 업데이트 완료');
+        } catch (error) {
+            console.error('깡갤 복사기: 임시 프롬프트 창 스타일 업데이트 실패', error);
+        }
+    }
+    
+    // 대필 임시 프롬프트 입력칸을 채팅 입력창 바로 아래에 붙여서 추가하는 함수
+    function addTempPromptField() {
+        try {
+            console.log('깡갤 복사기: 임시 프롬프트 입력칸 추가 시작');
+            
+            // 임시 대필칸 사용 설정 확인
+            const useTempField = $('#copybot_temp_field_toggle').attr('data-enabled') === 'true';
+            
+            // 기존 임시 프롬프트 제거
+            document.querySelectorAll('.copybot_temp_prompt_below').forEach(el => el.remove());
+            
+            if (!useTempField) {
+                console.log('깡갤 복사기: 임시 대필칸 사용 안함 - 건너뜀');
+                return;
+            }
+            
+            const sendTextarea = document.querySelector('#send_textarea');
+            if (!sendTextarea) {
+                console.log('깡갤 복사기: send_textarea를 찾을 수 없음');
+                return;
+            }
+
+            // send_textarea의 부모와 조부모 찾기
+            const textareaParent = sendTextarea.parentElement; // nonQRFormItems
+            const grandParent = textareaParent.parentElement; // send_form
+            
+            if (!grandParent) {
+                console.log('깡갤 복사기: send_form을 찾을 수 없음');
+                return;
+            }
+
+            // 임시 대필칸 생성 (완전히 새로운 컨테이너로)
+            const tempPromptContainer = document.createElement('div');
+            tempPromptContainer.className = 'copybot_temp_prompt_below';
+            tempPromptContainer.style.cssText = `
+                width: 100%;
+                margin: 0;
+                padding: 0;
+                order: 999;
+            `;
+            
+            const tempPromptInput = document.createElement('textarea');
+            tempPromptInput.id = 'copybot_temp_prompt';
+            tempPromptInput.placeholder = '대필 임시 지시문...';
+            tempPromptInput.rows = 1;
+            
+            // send_textarea와 같은 스타일 복사
+            const originalStyles = window.getComputedStyle(sendTextarea);
+            tempPromptInput.style.cssText = `
+                width: 100%;
+                border: ${originalStyles.border};
+                border-top: none;
+                border-radius: 0 0 5px 5px;
+                background: ${originalStyles.backgroundColor};
+                color: ${originalStyles.color};
+                font-family: ${originalStyles.fontFamily};
+                font-size: ${originalStyles.fontSize};
+                padding: ${originalStyles.padding};
+                resize: vertical;
+                min-height: 35px;
+                max-height: 100px;
+                box-sizing: border-box;
+                outline: none;
+                margin: 0;
+            `;
+
+            // 자동 높이 조절 기능 추가
+            const autoResize = () => {
+                tempPromptInput.style.height = 'auto';
+                const scrollHeight = tempPromptInput.scrollHeight;
+                const maxHeight = 100; // 최대 높이 제한
+                const minHeight = 35; // 최소 높이
+                
+                if (scrollHeight > maxHeight) {
+                    tempPromptInput.style.height = maxHeight + 'px';
+                    tempPromptInput.style.overflowY = 'auto';
+                } else {
+                    tempPromptInput.style.height = Math.max(scrollHeight, minHeight) + 'px';
+                    tempPromptInput.style.overflowY = 'hidden';
+                }
+            };
+
+            // 입력 시 자동 저장 및 높이 조절
+            tempPromptInput.addEventListener('input', () => {
+                autoResize();
+                saveTempPrompt();
+            });
+
+            // 초기 높이 설정
+            setTimeout(autoResize, 100);
+            
+            tempPromptContainer.appendChild(tempPromptInput);
+            
+            // send_textarea의 border-radius 수정 (연결된 느낌)
+            sendTextarea.style.borderRadius = '5px 5px 0 0';
+            
+            // 안전한 방법: send_form의 맨 마지막에 추가 (기존 레이아웃 건드리지 않음)
+            grandParent.appendChild(tempPromptContainer);
+
+            console.log('깡갤 복사기: 임시 프롬프트 입력칸 추가 완료');
+
+        } catch (error) {
+            console.error('깡갤 복사기: 임시 프롬프트 입력칸 추가 실패', error);
+        }
+    }
+
+    // **간단한 최우선순위 방식: 100% 안전한 대필 실행 함수 (사용자 설정 건드리지 않음 + 토큰 절약)**
+    async function executeGhostwrite() {
         try {
             const promptText = $('#copybot_ghostwrite_textbox').val().trim();
-            const chatInput = $('#send_textarea');
-            const chatInputText = chatInput.val().trim();
+            const useTempField = $('#copybot_temp_field_toggle').attr('data-enabled') === 'true';
             
             let finalPrompt = '';
 
-            if (promptText) {
-                finalPrompt += promptText;
-            }
-            if (chatInputText) {
-                if (finalPrompt) finalPrompt += ' '; 
-                finalPrompt += chatInputText;
+            if (useTempField) {
+                // 임시 대필칸 사용: 대필프롬프트 + 임시프롬프트만 사용
+                const tempPromptText = $('#copybot_temp_prompt').val().trim();
+                
+                if (promptText) {
+                    finalPrompt += promptText;
+                }
+                if (tempPromptText) {
+                    if (finalPrompt) finalPrompt += ', '; 
+                    finalPrompt += tempPromptText;
+                }
+            } else {
+                // 기본 입력창 사용: 대필프롬프트 + 기본 입력창 내용 사용
+                const chatInputText = $('#send_textarea').val().trim();
+                
+                if (promptText) {
+                    finalPrompt += promptText;
+                }
+                if (chatInputText) {
+                    if (finalPrompt) finalPrompt += ', ';  
+                    finalPrompt += chatInputText;
+                }
             }
 
-            let command = '/impersonate {{char}}';
-            if (finalPrompt) {
-                command += ` ${finalPrompt}`;
+            // 대필 요청 시 토스트 메시지 표시 (프롬프트 내용 포함)
+            let requestMessage;
+            if (!finalPrompt.trim()) {
+                requestMessage = '빈 프롬프트로 대필 요청합니다.';
+            } else {
+                requestMessage = finalPrompt.length > 100 
+                    ? `"${finalPrompt.substring(0, 100)}..."로 대필 요청합니다.`
+                    : `"${finalPrompt}"로 대필 요청합니다.`;
+            }
+            toastr.info(requestMessage);
+
+            console.log('🎭 깡갤 복사기: 간단한 최우선순위 대필 시작');
+            
+            // SillyTavern context 가져오기
+            const context = window.SillyTavern.getContext();
+            if (!context || !context.generateQuietPrompt) {
+                toastr.error('SillyTavern 컨텍스트를 찾을 수 없습니다.');
+                return;
+            }
+
+            // 사용자 설정 확인 (절대 변경하지 않음!)
+            const userSetting = context.chatCompletionSettings?.reasoning_effort;
+            console.log('🔹 사용자 설정 reasoning_effort:', userSetting, '(절대 건드리지 않음)');
+
+            // 간단한 오버라이드 명령어 (generateQuietPrompt 자체가 이미 최우선순위!)
+            const overridePrompt = finalPrompt.trim() 
+                ? `<OVERRIDE>
+{{user}} POV only. ${finalPrompt}
+</OVERRIDE>`
+                : `<OVERRIDE>
+{{user}} POV only.
+</OVERRIDE>`;
+
+            console.log('🔹 최우선순위 오버라이드 전송 중... (극한 토큰 절약)');
+            
+            // generateQuietPrompt 자체가 최우선순위 처리!
+            const result = await context.generateQuietPrompt(
+                overridePrompt,
+                false,
+                true
+                // 사용자의 reasoning_effort 설정 그대로 유지!
+            );
+            
+            console.log('✅ 대필 원본 결과 받음:', result);
+
+            // 사용자 설정이 변경되지 않았는지 재확인
+            const stillUserSetting = context.chatCompletionSettings?.reasoning_effort;
+            if (userSetting === stillUserSetting) {
+                console.log('✅ 사용자 설정 변경 없음 - 100% 안전!');
+            } else {
+                console.log('⚠️ 사용자 설정 변경 감지 - 문제 발생!');
+            }
+
+            // 시스템 메시지만 제거 (사용자 프리필은 절대 건드리지 않음)
+            let cleanedResult = result;
+            
+            if (cleanedResult) {
+                // 오직 우리가 추가한 오버라이드 메시지만 제거
+                cleanedResult = cleanedResult.replace(/<OVERRIDE>/gi, '');
+                cleanedResult = cleanedResult.replace(/<\/OVERRIDE>/gi, '');
+                cleanedResult = cleanedResult.replace(/\{\{user\}\} POV only[^\n]*/gi, '');
+                cleanedResult = cleanedResult.replace(/<Override Primary Directive>/gi, '');
+                cleanedResult = cleanedResult.replace(/<CRITICAL_SYSTEM_OVERRIDE>/gi, '');
+                cleanedResult = cleanedResult.replace(/\[System Override[^\]]*\]/gi, '');
+                
+                // 빈 줄 정리
+                cleanedResult = cleanedResult.replace(/^\s*\n+/, '').trim();
+                
+                console.log('🧹 정리된 대필 결과:', cleanedResult);
+
+                if (cleanedResult.trim()) {
+                    // 기존 입력창에 정리된 대필 결과 삽입
+                    const chatInput = $('#send_textarea');
+                    chatInput.val(cleanedResult);
+                    chatInput.trigger('input');
+                    
+                    console.log('깡갤 복사기: 대필 결과 입력창 삽입 완료');
+                } else {
+                    toastr.warning('대필 결과가 비어있습니다. 다시 시도해주세요.');
+                }
+            } else {
+                toastr.warning('대필 결과를 받지 못했습니다. 다시 시도해주세요.');
             }
             
-            let toastMessage = '대필 명령을 실행합니다.';
-            if (finalPrompt) {
-                toastMessage = `대필 명령 실행: ${finalPrompt}`;
+            // 임시 프롬프트 내용 저장
+            if (useTempField) {
+                saveTempPrompt();
             }
-
-            executeSimpleCommand(command, toastMessage, null, true);
 
         } catch (error) {
             console.error('깡갤 복사기: 대필 실행 중 오류', error);
-            toastr.error('대필 실행 중 오류가 발생했습니다.');
+            toastr.error('대필 중단!.');
+        }
+    }
+
+    // 임시 프롬프트 저장 함수
+    function saveTempPrompt() {
+        try {
+            const tempPrompt = $('#copybot_temp_prompt').val();
+            sessionStorage.setItem('copybot_temp_prompt', tempPrompt);
+        } catch (error) {
+            console.warn('깡갤 복사기: 임시 프롬프트 저장 실패', error);
+        }
+    }
+
+    // 임시 프롬프트 로드 함수
+    function loadTempPrompt() {
+        try {
+            const savedTempPrompt = sessionStorage.getItem('copybot_temp_prompt');
+            if (savedTempPrompt) {
+                $('#copybot_temp_prompt').val(savedTempPrompt);
+            }
+        } catch (error) {
+            console.warn('깡갤 복사기: 임시 프롬프트 로드 실패', error);
         }
     }
 
@@ -588,9 +861,15 @@
 
             cleanedText = cleanedText.replace(/<[^>]*>/g, '');
             
-            // {{ }} 템플릿 구문 제거 추가
+            // {{ }} 템플릿 구문 제거 추가(에셋)
             cleanedText = cleanedText.replace(/\{\{.*?\}\}/g, '');
             
+			// [STATUS_START] ~ [STATUS_END] 상태창 제거(301호)
+            cleanedText = cleanedText.replace(/\[STATUS_START\][\s\S]*?\[STATUS_END\]/g, '');
+
+			// 괴담출 상태창 제거 (접속자 정보 ~ :: ~ ::)
+            cleanedText = cleanedText.replace(/접속자 정보[\s\S]*?::[^:]*::/g, '');
+			
             cleanedText = cleanedText.replace(/\n\s*\n\s*\n/g, '\n\n');
             cleanedText = cleanedText.trim();
 
@@ -628,9 +907,110 @@
         });
     }
 
-    // 통합 아이콘 관리 함수
+    // **강화된 DOM 준비 상태 확인 함수**
+    function isInputFieldReady() {
+        const rightSendForm = document.querySelector('#rightSendForm');
+        const leftSendForm = document.querySelector('#leftSendForm');
+        const textarea = document.querySelector('#send_textarea');
+        const sendButton = document.querySelector('#send_but');
+        
+        // 더 엄격한 체크: 모든 요소가 존재하고 실제로 DOM에 연결되어 있는지 확인
+        const allElementsExist = !!(rightSendForm && leftSendForm && textarea && sendButton);
+        const allElementsConnected = !!(
+            rightSendForm && rightSendForm.isConnected &&
+            leftSendForm && leftSendForm.isConnected &&
+            textarea && textarea.isConnected &&
+            sendButton && sendButton.isConnected
+        );
+        
+        // 요소들이 실제로 화면에 렌더링되었는지 확인
+        const hasLayout = !!(
+            textarea && textarea.offsetParent &&
+            rightSendForm && rightSendForm.offsetParent
+        );
+        
+        const isReady = allElementsExist && allElementsConnected && hasLayout;
+        
+        if (!isReady) {
+            console.log('깡갤 복사기: DOM 준비 상태 체크 실패:', {
+                allElementsExist,
+                allElementsConnected,
+                hasLayout,
+                rightSendForm: !!rightSendForm,
+                leftSendForm: !!leftSendForm,
+                textarea: !!textarea,
+                sendButton: !!sendButton
+            });
+        }
+        
+        return isReady;
+    }
+
+    // **레이아웃 안정화까지 기다리는 함수**
+    function waitForLayoutStabilization() {
+        return new Promise((resolve) => {
+            let attempts = 0;
+            const maxAttempts = 20; // 최대 20번 시도 (10초)
+            
+            const checkStability = () => {
+                attempts++;
+                
+                if (isInputFieldReady()) {
+                    // 추가로 200ms 더 기다려서 레이아웃이 완전히 안정되도록 함
+                    setTimeout(() => {
+                        if (isInputFieldReady()) {
+                            console.log(`깡갤 복사기: DOM 안정화 완료 (${attempts}번째 시도)`);
+                            resolve(true);
+                        } else {
+                            if (attempts < maxAttempts) {
+                                setTimeout(checkStability, 500);
+                            } else {
+                                console.warn('깡갤 복사기: DOM 안정화 타임아웃');
+                                resolve(false);
+                            }
+                        }
+                    }, 200);
+                } else {
+                    if (attempts < maxAttempts) {
+                        setTimeout(checkStability, 500);
+                    } else {
+                        console.warn('깡갤 복사기: DOM 안정화 실패 - 타임아웃');
+                        resolve(false);
+                    }
+                }
+            };
+            
+            checkStability();
+        });
+    }
+
+    // **안전한 아이콘 업데이트 함수 (DOM 안정화 대기 포함)**
+    async function safeUpdateInputFieldIcons() {
+        try {
+            console.log('깡갤 복사기: 안전한 아이콘 업데이트 시작...');
+            
+            // DOM이 안정화될 때까지 기다림
+            const isStabilized = await waitForLayoutStabilization();
+            
+            if (!isStabilized) {
+                console.warn('깡갤 복사기: DOM 안정화 실패, 아이콘 업데이트 건너뜀');
+                return;
+            }
+            
+            console.log('깡갤 복사기: DOM 안정화 확인됨, 아이콘 업데이트 진행');
+            updateInputFieldIcons();
+            
+        } catch (error) {
+            console.error('깡갤 복사기: 안전한 아이콘 업데이트 실패', error);
+        }
+    }
+
+    // 통합 아이콘 관리 함수 (로딩 개선)
     function updateInputFieldIcons() {
         try {
+            console.log('깡갤 복사기: 아이콘 업데이트 시작');
+            
+            // 기존 아이콘들 제거
             document.querySelectorAll('.copybot_input_field_icon, .copybot_independent_container').forEach(el => el.remove());
 
             const rightSendForm = document.querySelector('#rightSendForm');
@@ -646,11 +1026,10 @@
             }
             
             const referenceIcon = document.querySelector('#send_but');
-            if (!referenceIcon) return;
-
-            const computedStyle = window.getComputedStyle(referenceIcon);
-            const themeIconSize = computedStyle.fontSize;
-            const themeIconColor = computedStyle.color;
+            if (!referenceIcon) {
+                console.warn('깡갤 복사기: send_but 요소를 찾을 수 없어 아이콘 업데이트 중단');
+                return;
+            }
 
             const iconsByPosition = { right: [], left: [], bottom_right: [], bottom_left: [] };
 
@@ -672,8 +1051,10 @@
                     const icon = document.createElement('div');
                     icon.className = `fa-solid ${item.iconClass} copybot_input_field_icon`;
                     icon.title = item.title;
-                    icon.style.fontSize = themeIconSize;
-                    icon.style.color = themeIconColor;
+                    // 매번 최신 테마 스타일 적용
+                    const currentStyle = window.getComputedStyle(referenceIcon);
+                    icon.style.fontSize = currentStyle.fontSize;
+                    icon.style.color = currentStyle.color;
                     icon.style.order = item.group;
                     icon.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); item.action(); });
                     
@@ -707,7 +1088,10 @@
                     case 'bottom_right':
                         const textareaParent = textarea.closest('#send_form') || textarea.parentElement;
                         if (textareaParent) {
-                            const { r, g, b } = rgbStringToObj(themeIconColor);
+                            // 최신 테마 색상 다시 가져오기
+                            const currentStyle = window.getComputedStyle(referenceIcon);
+                            const currentThemeColor = currentStyle.color;
+                            const { r, g, b } = rgbStringToObj(currentThemeColor);
                             const { h, s } = rgbToHsl(r, g, b);
                             const hoverColor = `hsl(${h}, ${s}%, 35%)`;
                             const activeColor = `hsl(${h}, ${s}%, 25%)`;
@@ -721,7 +1105,7 @@
                                 icon.style.margin = '0 3px';
                                 icon.style.transition = 'color 0.2s ease';
                                 icon.addEventListener('mouseenter', () => { icon.style.color = hoverColor; });
-                                icon.addEventListener('mouseleave', () => { icon.style.color = themeIconColor; });
+                                icon.addEventListener('mouseleave', () => { icon.style.color = currentThemeColor; });
                                 icon.addEventListener('mousedown', () => { icon.style.color = activeColor; });
                                 icon.addEventListener('mouseup', () => { icon.style.color = hoverColor; });
                                 independentContainer.appendChild(icon);
@@ -812,12 +1196,21 @@
                 const button = $(this);
                 const isEnabled = button.attr('data-enabled') === 'true';
                 button.attr('data-enabled', !isEnabled).text(isEnabled ? 'OFF' : 'ON');
-                const targetPanel = button.attr('id') === 'copybot_ghostwrite_toggle'
-                    ? $('#copybot_ghostwrite_position_options, #copybot_ghostwrite_textbox, #copybot_ghostwrite_panel .copybot_description')
-                    : $(`#${button.attr('id').replace('_toggle', '_options')}`);
-                targetPanel.slideToggle(!isEnabled);
+                
+                if (button.attr('id') === 'copybot_ghostwrite_toggle') {
+                    const targetPanel = $('#copybot_ghostwrite_position_options, #copybot_ghostwrite_textbox, #copybot_ghostwrite_panel .copybot_description');
+                    targetPanel.slideToggle(!isEnabled);
+                } else if (button.attr('id') === 'copybot_temp_field_toggle') {
+                    // 임시 대필칸 사용 토글 처리
+                    addTempPromptField();
+                } else {
+                    const targetPanel = $(`#${button.attr('id').replace('_toggle', '_options')}`);
+                    targetPanel.slideToggle(!isEnabled);
+                }
+                
                 updateActionButtons();
-                updateInputFieldIcons();
+                // 설정 변경 시 안전한 아이콘 업데이트 사용
+                safeUpdateInputFieldIcons();
                 saveSettings();
             },
             '.copybot_action_button': function() {
@@ -844,7 +1237,8 @@
 
         $(document).off('change', '.copybot_checkbox, .copybot_radio').on('change', '.copybot_checkbox, .copybot_radio', () => {
             updateActionButtons();
-            updateInputFieldIcons();
+            // 설정 변경 시 안전한 아이콘 업데이트 사용
+            safeUpdateInputFieldIcons();
             saveSettings();
         });
         
@@ -852,6 +1246,34 @@
         $(document).off('click', '#copybot_settings_panel, #copybot_ghostwrite_panel').on('click', (e) => e.stopPropagation());
 
         console.log('깡갤 복사기: 이벤트 핸들러 설정 완료');
+    }
+
+    // **강화된 다중 시점 아이콘 업데이트 스케줄러**
+    function scheduleIconUpdates() {
+        console.log('깡갤 복사기: 다중 시점 아이콘 업데이트 스케줄링 시작');
+        
+        // 첫 번째 시도: 즉시 시도 (DOM이 이미 준비되어 있을 수 있음)
+        safeUpdateInputFieldIcons();
+        
+        // 추가 시도들: 점진적으로 늘어나는 간격으로 재시도
+        const updateTimings = [200, 500, 1000, 2000, 3000]; // 마지막에 3초 추가
+        
+        updateTimings.forEach((timing, index) => {
+            setTimeout(() => {
+                console.log(`깡갤 복사기: ${index + 2}번째 아이콘 업데이트 시도 (${timing}ms 후)`);
+                safeUpdateInputFieldIcons();
+            }, timing);
+        });
+
+        // 최종 백업 시도: 10초 후 강제 업데이트 (DOM 안정화 대기 없이)
+        setTimeout(() => {
+            console.log('깡갤 복사기: 최종 백업 아이콘 업데이트 시도');
+            if (isInputFieldReady()) {
+                updateInputFieldIcons();
+            } else {
+                console.warn('깡갤 복사기: 최종 백업 시도에서도 DOM이 준비되지 않음');
+            }
+        }, 10000);
     }
 
     // 초기화 함수
@@ -867,8 +1289,12 @@
                 
                 setTimeout(() => {
                     loadSettings();
+                    loadTempPrompt();
+                    addTempPromptField();
                     updateActionButtons();
-                    updateInputFieldIcons();
+                    
+                    // 강화된 다중 시점 아이콘 업데이트 시도
+                    scheduleIconUpdates();
                 }, 100);
                 
                 console.log('깡갤 복사기: ✅ 초기화 완료!');
@@ -884,9 +1310,38 @@
     $(document).ready(function() {
         console.log('깡갤 복사기: DOM 준비 완료');
         setTimeout(initialize, 1000);
+        
         $(document).on('characterSelected chat_render_complete CHAT_CHANGED', () => {
-            setTimeout(() => { if (!isInitialized) initialize(); updateInputFieldIcons(); }, 500);
+            setTimeout(() => { 
+                if (!isInitialized) initialize(); 
+                addTempPromptField();
+                loadTempPrompt();
+                // 이벤트 기반 아이콘 업데이트도 안전한 방식으로 변경
+                safeUpdateInputFieldIcons(); 
+            }, 500);
         });
+        
+        // 효율적인 테마 변경 감지 (body class 변경만 감시)
+        const themeObserver = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.target === document.body && mutation.attributeName === 'class') {
+                    console.log('깡갤 복사기: 테마 변경 감지, 아이콘 및 임시 프롬프트 창 업데이트');
+                    setTimeout(() => {
+                        safeUpdateInputFieldIcons(); // 테마 변경 시에도 안전한 업데이트 사용
+                        updateTempPromptStyle();
+                    }, 100);
+                }
+            });
+        });
+        
+        if (document.body) {
+            themeObserver.observe(document.body, { 
+                attributes: true, 
+                attributeFilter: ['class'],
+                subtree: false 
+            });
+        }
+        
         $(document).on('change', '#character_select', () => {
             setTimeout(() => { if (!isInitialized) initialize(); }, 200);
         });
