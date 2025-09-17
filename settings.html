@@ -1,0 +1,441 @@
+
+<div id="copybot_settings" class="extension_settings">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b>📋 깡갤 복사기</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+            <div class="copybot_panel">
+                <!-- 입력 섹션 -->
+                <div class="copybot_section">
+                    <div class="copybot_input_row">
+                        <div class="copybot_input_group">
+                            <label for="copybot_start">시작위치:</label>
+                            <input type="number" id="copybot_start" placeholder="0" min="0" class="text_pole">
+                        </div>
+                        
+                        <div class="copybot_input_group">
+                            <label for="copybot_end">종료위치:</label>
+                            <input type="number" id="copybot_end" placeholder="10" min="0" class="text_pole">
+                        </div>
+                        
+                        <button id="copybot_execute" class="menu_button" title="메시지를 클립보드에 복사하고 아래 텍스트박스에 표시">
+                            단순 복사
+                        </button>
+                    </div>
+                    
+                    <small>메세지 범위 입력 후 단순 복사 버튼을 클릭하면 클립보드에 자동 복사&아래 텍스트박스에 해당 내용이 삽입됩니다. 미입력시 자동으로 첫번째 메세지/마지막 메세지로 설정됩니다.</small>
+                </div>
+                
+                <!-- 결과 섹션 -->
+                <div class="copybot_section">
+                    <textarea id="copybot_textbox" placeholder="복사된 내용이 여기에 표시됩니다..."></textarea>
+                    
+                    <div class="copybot_textbox_buttons">
+                        <button id="copybot_remove_tags" class="copybot_textbox_button" title="텍스트박스에서 태그 제거" disabled>
+                            태그 제거
+                        </button>
+                        <button id="copybot_linebreak_fix" class="copybot_textbox_button copybot_linebreak_button" title="텍스트박스에서 줄바꿈 정리" disabled>
+                            정리
+                        </button>
+                        <button id="copybot_copy_content" class="copybot_textbox_button" title="현재 텍스트박스 내용을 클립보드에 복사" disabled>
+                            위 내용 복사
+                        </button>
+                        <button id="copybot_clear_content" class="copybot_textbox_button copybot_clear_button" title="텍스트박스 내용 전체 삭제" disabled>
+                            비우기
+                        </button>
+                        <button id="copybot_save_txt" class="copybot_textbox_button copybot_save_button" title="텍스트박스 내용을 txt 파일로 저장" disabled>
+                            txt저장
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 메시지 이동 및 설정 섹션 -->
+                <div class="copybot_section copybot_section_dark">
+                    <div class="copybot_jump_row">
+                        <button id="copybot_jump_first" class="copybot_jump_button" title="첫 번째 메시지로 이동">
+                            첫 메시지로
+                        </button>
+                        
+                        <button id="copybot_jump_last" class="copybot_jump_button" title="마지막 메시지로 이동">
+                            마지막 메시지로
+                        </button>
+                        
+                        <div class="copybot_jump_input_group">
+                            <input type="number" id="copybot_jump_number" placeholder="번호" min="0" class="text_pole">
+                            <button id="copybot_jump_to" class="copybot_jump_button" title="지정한 메시지 번호로 이동">
+                                이동
+                            </button>
+                        </div>
+                        
+                        <div class="copybot_settings_buttons_group">
+                            <button id="copybot_open_ghostwrite_button" class="copybot_settings_button" title="대필 옵션">
+                                대필
+                            </button>
+                            <button id="copybot_open_settings_button" class="copybot_settings_button" title="편의기능 옵션">
+                                편의기능
+                            </button>
+                            <button id="copybot_open_message_operations_button" class="copybot_settings_button" title="메세지 정리 옵션">
+                                메세지 정리
+                            </button>
+                            <button id="copybot_open_misc_button" class="copybot_settings_button" title="기타 옵션">
+                                기타
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 동적 액션 버튼이 표시될 컨테이너 -->
+                    <div id="copybot_action_buttons" class="copybot_action_buttons_row"></div>
+                    
+                    <!-- 대필 설정창 -->
+                    <div id="copybot_ghostwrite_panel" class="copybot_settings_panel" style="display: none;">
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">대필 기능 사용</span>
+                                <button id="copybot_ghostwrite_toggle" class="copybot_toggle_button" data-enabled="false">
+                                    OFF
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="copybot_settings_item">
+                        <!-- 대필 프롬프트 및 프리셋 섹션 -->
+
+                            <!-- 프리셋 프롬프트 및 프리셋 섹션 -->
+							<div id="copybot_preset_row" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+								<!-- 드롭다운과 이름 변경 입력창을 감싸는 래퍼 -->
+								<div id="copybot_preset_name_wrapper" style="flex-grow: 1; position: relative;">
+									<select id="copybot_preset_select" class="text_pole" style="width: 100%;">
+										<option value="">기본 프리셋</option>
+										<!-- 자바스크립트로 프리셋 목록이 여기에 추가됩니다 -->
+									</select>
+									<input type="text" id="copybot_preset_rename_input" class="text_pole" style="width: 100%; display: none;" placeholder="프리셋 이름 입력..."/>
+								</div>
+								<div id="copybot_preset_buttons" style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
+									<!-- 일반 모드 아이콘 (저장 아이콘 제거됨) -->
+									<i id="copybot_preset_edit" class="fa-solid fa-edit copybot_icon_button" title="프리셋 편집 모드 시작"></i>
+									<!-- 편집 모드 아이콘 (처음에는 숨김) -->
+									<i id="copybot_preset_confirm" class="fa-solid fa-check copybot_icon_button" title="변경사항 저장" style="display:none; color: #48bb78;"></i>
+									<i id="copybot_preset_delete" class="fa-solid fa-trash-alt copybot_icon_button" title="선택한 프리셋 삭제" style="display:none; color: #e53e3e;"></i>
+									<i id="copybot_preset_cancel" class="fa-solid fa-times copybot_icon_button" title="편집 취소" style="display:none;"></i>
+								</div>
+							</div>
+
+							<!-- 통합된 프리셋 내용 박스 -->
+                            <div id="copybot_prompt_container" class="copybot_preset_content_box">
+                                <!-- "대필 기본 지시문" 라벨 -->
+                                <div class="copybot_settings_main" style="margin-bottom: 8px;">
+                                    <span class="copybot_settings_label">대필 기본 지시문</span>
+                                    <span id="copybot_basic_prompt_status" class="copybot_status_icon" style="margin-left: 8px; display: none;">⏳</span>
+                                </div>
+                                
+                                <!-- 대필 기본 지시문 텍스트박스 -->
+                                <textarea id="copybot_ghostwrite_textbox" placeholder="5문장 이하로, 정중한 말투, 1인칭, NSFW 등..." class="copybot_ghostwrite_text" style="display: block;"></textarea>
+                                
+                                <!-- 대필 제외 지시문 컨테이너 -->
+                                <div id="copybot_ghostwrite_exclude_container" style="display: block; margin-top: 12px;">
+                                    <div class="copybot_settings_main">
+                                        <span class="copybot_settings_label">대필 제외 지시문</span>
+                                        <span id="copybot_exclude_prompt_status" class="copybot_status_icon" style="margin-left: 8px; display: none;">⏳</span>
+                                    </div>
+                                    <textarea id="copybot_ghostwrite_exclude_textbox" placeholder="웃음, 다정한 말투, 질문하지 않기, 존댓말 금지, 한남 말투 등..." class="copybot_ghostwrite_text" style="margin-top: 8px;"></textarea>
+                                </div>
+                                
+                                <!-- 사용할 프로필 섹션 -->
+                                <div class="copybot_profile_section" style="margin-top: 12px;">
+                                    <div class="copybot_settings_main" style="margin-bottom: 8px;">
+                                        <span class="copybot_settings_label">사용할 프로필</span>
+                                        <span id="copybot_profile_status" class="copybot_status_icon" style="margin-left: 8px; display: none;">⏳</span>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <select id="copybot_ghostwrite_profile_select" class="text_pole" style="flex: 1;">
+                                            <option value="default">기본값 사용</option>
+                                            <!-- 프로필 목록은 나중에 자바스크립트로 채워집니다 -->
+                                        </select>
+                                        <!-- 프로필 목록 새로고침 버튼 -->
+                                        <span id="copybot_reload_profiles_button" title="프로필 목록 새로고침" class="fa-solid fa-sync-alt" style="cursor: pointer; opacity: 0.7;"></span>
+                                    </div>
+                                    <div class="copybot_description" style="margin-top: 8px; font-size: 11px; color: #ff4d4d; font-weight: bold;">
+                                        * 실험적인 기능입니다.
+                                    </div>
+                                </div>
+                                
+                                <!-- 프리셋 통합 설명문구 -->
+                                <div class="copybot_preset_description" style="margin-top: 16px; padding: 8px 12px; background: #f0f4f8; border-left: 3px solid #4299e1; border-radius: 4px; font-size: 12px; color: #2d3748; line-height: 1.4;">
+                                    위 3가지(기본 지시문 + 제외 지시문 + 프로필)이 모두 현재 선택된 프리셋에 함께 저장됩니다. 프리셋은 항상 마지막에 선택된 프리셋으로 유지됩니다.
+                                </div>
+								
+								<!-- 프리셋 순서 변경 UI - 프롬프트 컨테이너 내부로 이동 -->
+								<div id="copybot_reorder_overlay" style="display: none;">
+									<div id="copybot_reorder_panel">
+										<h5>프리셋 순서 변경</h5>
+										<small>항목을 드래그하여 순서를 변경하세요.</small>
+										<ul id="copybot_reorder_list">
+											<!-- JS로 프리셋 목록이 채워집니다 -->
+										</ul>
+										<div id="copybot_reorder_buttons">
+											<button id="copybot_reorder_save" class="copybot_textbox_button">저장</button>
+											<button id="copybot_reorder_cancel" class="copybot_textbox_button copybot_clear_button">취소</button>
+										</div>
+									</div>
+								</div>
+							</div>
+                        </div>
+						
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">대필 버튼 위치</span>
+                            </div>
+                            <div id="copybot_ghostwrite_position_options" class="copybot_settings_sub" style="display: none;">
+                                <div class="copybot_settings_sub_row" style="flex-wrap: wrap;">
+                                    <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                        <input type="radio" id="copybot_ghostwrite_position_left" name="copybot_ghostwrite_position" value="left" class="copybot_radio">
+                                        <label for="copybot_ghostwrite_position_left" class="copybot_settings_sub_label">좌측</label>
+                                    </div>
+                                    <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                        <input type="radio" id="copybot_ghostwrite_position_bottom_right" name="copybot_ghostwrite_position" value="bottom_right" class="copybot_radio">
+                                        <label for="copybot_ghostwrite_position_bottom_right" class="copybot_settings_sub_label">우상단</label>
+                                    </div>
+                                    <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                        <input type="radio" id="copybot_ghostwrite_position_bottom_left" name="copybot_ghostwrite_position" value="bottom_left" class="copybot_radio">
+                                        <label for="copybot_ghostwrite_position_bottom_left" class="copybot_settings_sub_label">좌하단</label>
+                                    </div>
+                                    <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                        <input type="radio" id="copybot_ghostwrite_position_right" name="copybot_ghostwrite_position" value="right" class="copybot_radio" checked>
+                                        <label for="copybot_ghostwrite_position_right" class="copybot_settings_sub_label">기본(우측)</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666; display:none;">
+                                대필 아이콘(<i class="fa-solid fa-user-edit"></i>)을 누르면, 위에 써진 내용(프롬프트)와 채팅창에 적힌 대필 지시문의 내용을 조합하여 사용자를 대신해 봇이 글을 써줍니다. (비어있는 곳은 알아서 무시합니다)
+                            </div>
+                        </div>
+                        
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">임시 대필칸 사용</span>
+                                <button id="copybot_temp_field_toggle" class="copybot_toggle_button" data-enabled="false">
+                                    OFF
+                                </button>
+                            </div>
+                            <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666;">
+                                체크하면 대필 전용칸이 생기고 기본 입력창 내용은 무시됩니다.<br>
+                                체크 해제시 기본 입력창에 쓴 내용을 대필 지시문으로 사용합니다.
+                            </div>
+                        </div>
+                        
+				</div>
+
+                    <!-- 메세지 정리 설정창 -->
+                    <div id="copybot_message_operations_panel" class="copybot_settings_panel" style="display: none;">
+                        
+                        <!-- 메시지 숨기기/보이기 섹션 -->
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">메시지 숨기기/보이기</span>
+                            </div>
+                            <div class="copybot_input_row" style="margin-top: 8px; align-items: center;">
+                                <div class="copybot_input_group">
+                                    <label for="copybot_hide_start">시작 위치:</label>
+                                    <input type="number" id="copybot_hide_start" placeholder="0" min="0" class="text_pole">
+                                </div>
+                                <div class="copybot_input_group">
+                                    <label for="copybot_hide_end">종료 위치:</label>
+                                    <input type="number" id="copybot_hide_end" placeholder="10" min="0" class="text_pole">
+                                </div>
+                                <div class="copybot_hide_button_container">
+								<button id="copybot_hide_execute" class="menu_button">숨김</button>
+								<button id="copybot_unhide_execute" class="menu_button">보임</button>
+							</div>
+                            </div>
+                            <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666;">
+                                /hide와 /unhide 명령어를 사용해 메시지를 숨기거나 다시 보이게 합니다.<br>
+                                숨긴 메시지는 AI가 인식하지 못하지만 채팅 기록에는 남아있습니다.
+                            </div>
+                        </div>
+
+                        <!-- 다중 메시지 삭제 섹션 -->
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">다중 메세지삭제</span>
+                            </div>
+                            <div class="copybot_input_row" style="margin-top: 8px; align-items: center;">
+                                <div class="copybot_input_group">
+                                    <label for="copybot_multi_delete_start">시작 위치:</label>
+                                    <input type="number" id="copybot_multi_delete_start" placeholder="0" min="0" class="text_pole">
+                                </div>
+                                <div class="copybot_input_group">
+                                    <label for="copybot_multi_delete_end">종료 위치:</label>
+                                    <input type="number" id="copybot_multi_delete_end" placeholder="10" min="0" class="text_pole">
+                                </div>
+                                <button id="copybot_multi_delete_execute" class="menu_button">삭제</button>
+                            </div>
+                            <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666;">
+                                지정된 범위의 메시지를 영구적으로 삭제합니다.<br><strong>실행 전 반드시 백업하세요.</strong>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- 편의기능 설정창 -->
+                    <div id="copybot_settings_panel" class="copybot_settings_panel" style="display: none;">
+                        
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">작성중인 메세지 태그제거</span>
+                                <button id="copybot_tag_remove_toggle" class="copybot_toggle_button" data-enabled="false">
+                                    OFF
+                                </button>
+                            </div>
+                            <div id="copybot_tag_remove_options" class="copybot_settings_sub" style="display: none;">
+                                <div class="copybot_settings_sub_row">
+                                    <div class="copybot_settings_sub_item">
+                                        <input type="checkbox" id="copybot_tag_remove_button" class="copybot_checkbox">
+                                        <label for="copybot_tag_remove_button" class="copybot_settings_sub_label">복사기</label>
+                                    </div>
+                                    <div class="copybot_settings_sub_item">
+                                        <input type="checkbox" id="copybot_tag_remove_icon" class="copybot_checkbox">
+                                        <label for="copybot_tag_remove_icon" class="copybot_settings_sub_label">입력 필드</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">마지막 메세지 삭제</span>
+                                <button id="copybot_delete_toggle" class="copybot_toggle_button" data-enabled="false">
+                                    OFF
+                                </button>
+                            </div>
+                            <div id="copybot_delete_options" class="copybot_settings_sub" style="display: none;">
+                                <div class="copybot_settings_sub_row">
+                                    <div class="copybot_settings_sub_item">
+                                        <input type="checkbox" id="copybot_delete_button" class="copybot_checkbox">
+                                        <label for="copybot_delete_button" class="copybot_settings_sub_label">복사기</label>
+                                    </div>
+                                    <div class="copybot_settings_sub_item">
+                                        <input type="checkbox" id="copybot_delete_icon" class="copybot_checkbox">
+                                        <label for="copybot_delete_icon" class="copybot_settings_sub_label">입력 필드</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">삭제후 재생성</span>
+                                <button id="copybot_delete_regenerate_toggle" class="copybot_toggle_button" data-enabled="false">
+                                    OFF
+                                </button>
+                            </div>
+                            <div id="copybot_delete_regenerate_options" class="copybot_settings_sub" style="display: none;">
+                                <div class="copybot_settings_sub_row">
+                                    <div class="copybot_settings_sub_item">
+                                        <input type="checkbox" id="copybot_delete_regenerate_button" class="copybot_checkbox">
+                                        <label for="copybot_delete_regenerate_button" class="copybot_settings_sub_label">복사기</label>
+                                    </div>
+                                    <div class="copybot_settings_sub_item">
+                                        <input type="checkbox" id="copybot_delete_regenerate_icon" class="copybot_checkbox">
+                                        <label for="copybot_delete_regenerate_icon" class="copybot_settings_sub_label">입력 필드</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 입력필드 위치 설정 섹션 -->
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">3종 아이콘 위치</span>
+                            </div>
+                            <div class="copybot_settings_sub" style="display: block;">
+                                <div class="copybot_settings_sub_row" style="flex-wrap: wrap;">
+                                    <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                        <input type="radio" id="copybot_position_left" name="copybot_position" value="left" class="copybot_radio">
+                                        <label for="copybot_position_left" class="copybot_settings_sub_label">좌측</label>
+                                    </div>
+                                    <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                        <input type="radio" id="copybot_position_bottom_right" name="copybot_position" value="bottom_right" class="copybot_radio">
+                                        <label for="copybot_position_bottom_right" class="copybot_settings_sub_label">우상단</label>
+                                    </div>
+                                    <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                        <input type="radio" id="copybot_position_bottom_left" name="copybot_position" value="bottom_left" class="copybot_radio">
+                                        <label for="copybot_position_bottom_left" class="copybot_settings_sub_label">좌하단</label>
+                                    </div>
+                                    <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                        <input type="radio" id="copybot_position_right" name="copybot_position" value="right" class="copybot_radio" checked>
+                                        <label for="copybot_position_right" class="copybot_settings_sub_label">기본(우측)</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 설명 섹션 -->
+                        <div class="copybot_section copybot_description_section">
+                            <div class="copybot_description">
+                                각 기능을 활성화한 후, <strong>복사기</strong> 체크박스를 선택하면 확장프로그램 내부에 버튼이 생성되고, <strong>입력 필드</strong> 체크박스를 선택하면 채팅 입력창 옆에 아이콘이 추가됩니다. 설정은 창을 닫을 때 자동 저장됩니다.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 기타 설정창 -->
+                    <div id="copybot_misc_panel" class="copybot_settings_panel" style="display: none;">
+						
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">고화질 프로필 사진</span>
+                                <button id="copybot_hq_profile_toggle" class="copybot_toggle_button" data-enabled="false">
+                                    OFF
+                                </button>
+                            </div>
+                            <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666;">
+                                프로필 사진을 고화질로 표시합니다.<br><small>이 옵션을 이용하는 것보다 SillyTavern의 <code>config.yaml</code> 파일에서 <code>thumbnails</code> 섹션의 <code>enabled</code> 값을 <code>true</code>에서 <code>false</code>로 변경하는 게 여러모로 훨씬 좋습니다. 파일 수정이 어려운 이용자를 위한 옵션입니다. 구형 기기를 사용할 경우 페이지 로딩 후 몇 초간 기니피그 한마리만큼의 성능 저하가 발생하며, 그 이후로는 햄스터 꼬리털 세포만큼의 성능 저하가 있습니다.</small>
+                            </div>
+                        </div>
+                        
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">입력창에 조절점 없애기</span>
+                                <button id="copybot_remove_resize_toggle" class="copybot_toggle_button" data-enabled="false">
+                                    OFF
+                                </button>
+                            </div>
+                            <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666;">
+                                채팅 입력창의 크기 조절 핸들을 제거합니다.
+                            </div>
+                        </div>
+                        
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">입력창 안내문 없애기</span>
+                                <button id="copybot_hide_placeholder_toggle" class="copybot_toggle_button" data-enabled="false">
+                                    OFF
+                                </button>
+                            </div>
+                            <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666;">
+                                채팅 입력창의 '메시지를 입력하거나 /? 도와주기 위해' 문구를 숨깁니다.<br>
+                                대필 임시 지시칸을 사용중일 때는 해당 칸의 안내문구도 함께 숨겨집니다.
+                            </div>
+                        </div>
+					
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">디버그 모드</span>
+                                <button id="copybot_debug_mode_toggle" class="copybot_toggle_button" data-enabled="false">
+                                    OFF
+                                </button>
+                            </div>
+                            <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666;">
+                                문제 해결을 위해 콘솔에 자세한 로그를 출력합니다. 이게 뭔지 모른다면 키지마세요! 근데 켜도 크게 상관은 없습니다. 개미 더듬이 세포 하나만큼의 성능 저하가 발생합니다.
+                            </div>
+							<div id="copybot_debug_info" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e9ecef; font-size: 11px; color: #6c757d; line-height: 1.6;">
+                                <div style="margin: 0 0 4px 0;">SillyTavern release 1.13.3 기준으로 작업되었음.</div>
+<div>깃헙링크: <a href="https://github.com/Unknown-7069/ggang-copy" target="_blank" rel="noopener noreferrer" style="color: #4299e1; text-decoration: none;">https://github.com/Unknown-7069/ggang-copy</a></div>                            </div>
+                        
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
