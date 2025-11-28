@@ -14,7 +14,6 @@
         saveSettings: function() {
             try {
                 const settings = {
-                    position: $('input[name="copybot_position"]:checked').val() || 'right',
                     ghostwrite: {
                         enabled: $('#copybot_ghostwrite_toggle').attr('data-enabled') === 'true',
                         text: $('#copybot_ghostwrite_textbox').val() || '',
@@ -29,23 +28,27 @@
                     tagRemove: {
                         enabled: $('#copybot_tag_remove_toggle').attr('data-enabled') === 'true',
                         button: $('#copybot_tag_remove_button').is(':checked'),
-                        icon: $('#copybot_tag_remove_icon').is(':checked')
+                        icon: $('#copybot_tag_remove_icon').is(':checked'),
+                        position: $('#copybot_tag_remove_position').val() || 'bottom_left'
                     },
                     delete: {
                         enabled: $('#copybot_delete_toggle').attr('data-enabled') === 'true',
                         button: $('#copybot_delete_button').is(':checked'),
-                        icon: $('#copybot_delete_icon').is(':checked')
+                        icon: $('#copybot_delete_icon').is(':checked'),
+                        position: $('#copybot_delete_position').val() || 'bottom_left'
                     },
                     deleteRegenerate: {
                         enabled: $('#copybot_delete_regenerate_toggle').attr('data-enabled') === 'true',
                         button: $('#copybot_delete_regenerate_button').is(':checked'),
-                        icon: $('#copybot_delete_regenerate_icon').is(':checked')
+                        icon: $('#copybot_delete_regenerate_icon').is(':checked'),
+                        position: $('#copybot_delete_regenerate_position').val() || 'bottom_left'
                     },
                     misc: {
                         hqProfile: $('#copybot_hq_profile_toggle').attr('data-enabled') === 'true',
                         removeResize: $('#copybot_remove_resize_toggle').attr('data-enabled') === 'true',
                         debugMode: $('#copybot_debug_mode_toggle').attr('data-enabled') === 'true',
-                        hidePlaceholder: $('#copybot_hide_placeholder_toggle').attr('data-enabled') === 'true'
+                        hidePlaceholder: $('#copybot_hide_placeholder_toggle').attr('data-enabled') === 'true',
+                        confirmDelete: $('#copybot_confirm_delete_toggle').attr('data-enabled') === 'true'
                     }
                 };
                 
@@ -146,10 +149,6 @@
                     window.CopyBotUtils.debugLog(window.copybot_debug_mode, '깡갤 복사기: 설정 로드 중', settings);
                 }
 
-                // 위치 설정
-                if (settings.position) {
-                    $(`input[name="copybot_position"][value="${settings.position}"]`).prop('checked', true);
-                }
 
                 // 대필 설정
                 if (settings.ghostwrite) {
@@ -190,12 +189,23 @@
                 $('#copybot_delete_toggle').attr('data-enabled', settings.delete.enabled).text(settings.delete.enabled ? 'ON' : 'OFF');
                 $('#copybot_delete_regenerate_toggle').attr('data-enabled', settings.deleteRegenerate.enabled).text(settings.deleteRegenerate.enabled ? 'ON' : 'OFF');
 
-                $('#copybot_tag_remove_button').prop('checked', settings.tagRemove.button);
+				$('#copybot_tag_remove_button').prop('checked', settings.tagRemove.button);
                 $('#copybot_tag_remove_icon').prop('checked', settings.tagRemove.icon);
+                if (settings.tagRemove.position) {
+                    $('#copybot_tag_remove_position').val(settings.tagRemove.position);
+                }
+                
                 $('#copybot_delete_button').prop('checked', settings.delete.button);
                 $('#copybot_delete_icon').prop('checked', settings.delete.icon);
+                if (settings.delete.position) {
+                    $('#copybot_delete_position').val(settings.delete.position);
+                }
+                
                 $('#copybot_delete_regenerate_button').prop('checked', settings.deleteRegenerate.button);
                 $('#copybot_delete_regenerate_icon').prop('checked', settings.deleteRegenerate.icon);
+                if (settings.deleteRegenerate.position) {
+                    $('#copybot_delete_regenerate_position').val(settings.deleteRegenerate.position);
+                }
 
                 if (settings.tagRemove.enabled) $('#copybot_tag_remove_options').show(); else $('#copybot_tag_remove_options').hide();
                 if (settings.delete.enabled) $('#copybot_delete_options').show(); else $('#copybot_delete_options').hide();
@@ -207,11 +217,13 @@
                     const hqProfileEnabled = settings.misc.hqProfile === true;
                     const removeResizeEnabled = settings.misc.removeResize === true;
                     const hidePlaceholderEnabled = settings.misc.hidePlaceholder === true;
+                    const confirmDeleteEnabled = settings.misc.confirmDelete === true;
                     window.copybot_debug_mode = settings.misc.debugMode === true;
 
                     $('#copybot_hq_profile_toggle').attr('data-enabled', hqProfileEnabled).text(hqProfileEnabled ? 'ON' : 'OFF');
                     $('#copybot_remove_resize_toggle').attr('data-enabled', removeResizeEnabled).text(removeResizeEnabled ? 'ON' : 'OFF');
                     $('#copybot_hide_placeholder_toggle').attr('data-enabled', hidePlaceholderEnabled).text(hidePlaceholderEnabled ? 'ON' : 'OFF');
+                    $('#copybot_confirm_delete_toggle').attr('data-enabled', confirmDeleteEnabled).text(confirmDeleteEnabled ? 'ON' : 'OFF');
                     $('#copybot_debug_mode_toggle').attr('data-enabled', window.copybot_debug_mode).text(window.copybot_debug_mode ? 'ON' : 'OFF');
 
                     if (window.copybot_debug_mode) {

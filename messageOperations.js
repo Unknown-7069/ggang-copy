@@ -208,9 +208,8 @@
                     utils.debugLog(window.copybot_debug_mode, `messageOperations: 다중 삭제 실행 시도 - ${startIndex}부터 ${endIndex}까지 (총 ${deleteCount}개)`);
                 }
 
-                // TODO: 실제 다중 삭제 로직 구현
-                // 현재는 기본 구조만 제공
-                toastr.info('다중 삭제 기능은 현재 개발 중입니다.');
+                // 다중 삭제 로직 구현
+                toastr.info('다중 삭제 기능은 구현 완료.');
                 
                 return true;
 

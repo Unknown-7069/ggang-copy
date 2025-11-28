@@ -2,7 +2,7 @@
 <div id="copybot_settings" class="extension_settings">
     <div class="inline-drawer">
         <div class="inline-drawer-toggle inline-drawer-header">
-            <b>📋 깡갤 복사기</b>
+            <b>📋 깡갤 복사기(테스트)</b>
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
         <div class="inline-drawer-content">
@@ -298,6 +298,15 @@
                                         <input type="checkbox" id="copybot_tag_remove_icon" class="copybot_checkbox">
                                         <label for="copybot_tag_remove_icon" class="copybot_settings_sub_label">입력 필드</label>
                                     </div>
+                                    <div class="copybot_settings_sub_item" style="flex-basis: 100%; margin-top: 8px;">
+                                        <label class="copybot_settings_sub_label" style="margin-right: 8px;">입력필드 위치:</label>
+                                        <select id="copybot_tag_remove_position" class="text_pole" style="width: auto; min-width: 120px;">
+                                            <option value="left">좌측</option>
+                                            <option value="right">우측</option>
+                                            <option value="bottom_left" selected>좌하단(기본)</option>
+                                            <option value="bottom_right">우상단</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -318,6 +327,15 @@
                                     <div class="copybot_settings_sub_item">
                                         <input type="checkbox" id="copybot_delete_icon" class="copybot_checkbox">
                                         <label for="copybot_delete_icon" class="copybot_settings_sub_label">입력 필드</label>
+                                    </div>
+                                    <div class="copybot_settings_sub_item" style="flex-basis: 100%; margin-top: 8px;">
+                                        <label class="copybot_settings_sub_label" style="margin-right: 8px;">입력필드 위치:</label>
+                                        <select id="copybot_delete_position" class="text_pole" style="width: auto; min-width: 120px;">
+                                            <option value="left">좌측</option>
+                                            <option value="right">우측</option>
+                                            <option value="bottom_left" selected>좌하단(기본)</option>
+                                            <option value="bottom_right">우상단</option>
+                                        </select>
                                     </div>
                                 </div>
                             </div>
@@ -340,37 +358,32 @@
                                         <input type="checkbox" id="copybot_delete_regenerate_icon" class="copybot_checkbox">
                                         <label for="copybot_delete_regenerate_icon" class="copybot_settings_sub_label">입력 필드</label>
                                     </div>
+                                    <div class="copybot_settings_sub_item" style="flex-basis: 100%; margin-top: 8px;">
+                                        <label class="copybot_settings_sub_label" style="margin-right: 8px;">입력필드 위치:</label>
+                                        <select id="copybot_delete_regenerate_position" class="text_pole" style="width: auto; min-width: 120px;">
+                                            <option value="left">좌측</option>
+                                            <option value="right">우측</option>
+                                            <option value="bottom_left" selected>좌하단(기본)</option>
+                                            <option value="bottom_right">우상단</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- 입력필드 위치 설정 섹션 -->
-                        <div class="copybot_settings_item">
+                        <!-- 삭제 전 재확인 옵션 (조건부 표시) -->
+                        <div id="copybot_confirm_delete_item" class="copybot_settings_item" style="display: none;">
                             <div class="copybot_settings_main">
-                                <span class="copybot_settings_label">3종 아이콘 위치</span>
+                                <span class="copybot_settings_label">삭제 전 재확인(좆됨 방지)</span>
+                                <button id="copybot_confirm_delete_toggle" class="copybot_toggle_button" data-enabled="false">
+                                    OFF
+                                </button>
                             </div>
-                            <div class="copybot_settings_sub" style="display: block;">
-                                <div class="copybot_settings_sub_row" style="flex-wrap: wrap;">
-                                    <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
-                                        <input type="radio" id="copybot_position_left" name="copybot_position" value="left" class="copybot_radio">
-                                        <label for="copybot_position_left" class="copybot_settings_sub_label">좌측</label>
-                                    </div>
-                                    <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
-                                        <input type="radio" id="copybot_position_bottom_right" name="copybot_position" value="bottom_right" class="copybot_radio">
-                                        <label for="copybot_position_bottom_right" class="copybot_settings_sub_label">우상단</label>
-                                    </div>
-                                    <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
-                                        <input type="radio" id="copybot_position_bottom_left" name="copybot_position" value="bottom_left" class="copybot_radio">
-                                        <label for="copybot_position_bottom_left" class="copybot_settings_sub_label">좌하단</label>
-                                    </div>
-                                    <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
-                                        <input type="radio" id="copybot_position_right" name="copybot_position" value="right" class="copybot_radio" checked>
-                                        <label for="copybot_position_right" class="copybot_settings_sub_label">기본(우측)</label>
-                                    </div>
-                                </div>
+                            <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666;">
+                                삭제나 재생성 기능을 실행할 때, 실수 방지를 위해 한 번 더 물어봅니다.
                             </div>
                         </div>
-                        
+						
                         <!-- 설명 섹션 -->
                         <div class="copybot_section copybot_description_section">
                             <div class="copybot_description">
@@ -430,7 +443,7 @@
                                 문제 해결을 위해 콘솔에 자세한 로그를 출력합니다. 이게 뭔지 모른다면 키지마세요! 근데 켜도 크게 상관은 없습니다. 개미 더듬이 세포 하나만큼의 성능 저하가 발생합니다.
                             </div>
 							<div id="copybot_debug_info" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e9ecef; font-size: 11px; color: #6c757d; line-height: 1.6;">
-                                <div style="margin: 0 0 4px 0;">SillyTavern release 1.13.3 기준으로 작업되었음.</div>
+                                <div style="margin: 0 0 4px 0;">SillyTavern release 1.14.0 기준으로 작업되었음.</div>
 <div>깃헙링크: <a href="https://github.com/Unknown-7069/ggang-copy" target="_blank" rel="noopener noreferrer" style="color: #4299e1; text-decoration: none;">https://github.com/Unknown-7069/ggang-copy</a></div>                            </div>
                         
                     </div>

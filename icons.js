@@ -156,16 +156,25 @@
             { type: 'ghostwrite', toggleId: 'copybot_ghostwrite_toggle', iconClass: 'fa-user-edit', title: '캐릭터에게 대필 요청', action: executeGhostwrite, group: 20 },
             { type: 'action', toggleId: 'copybot_tag_remove_toggle', iconClass: 'fa-tags', title: '작성중인 메시지의 태그 제거', action: () => removeTagsFromElement('#send_textarea'), group: 20 },
             { type: 'action', toggleId: 'copybot_delete_toggle', iconClass: 'fa-trash', title: '마지막 메시지 삭제', action: () => executeSimpleCommand('/del 1', '마지막 메시지 1개를 삭제했습니다.'), group: 20 },
-            { type: 'action', toggleId: 'copybot_delete_regenerate_toggle', iconClass: 'fa-redo', title: '마지막 메시지 삭제 후 재생성', action: () => executeSimpleCommand('/del 1', '마지막 메시지를 삭제하고 재생성합니다.', triggerCacheBustRegeneration), group: 30 }
+            { type: 'action', toggleId: 'copybot_delete_regenerate_toggle', iconClass: 'fa-redo', title: '마지막 메시지 삭제 후 재생성', action: () => callbacks?.smartDeleteAndRegenerate?.() || console.error('smartDeleteAndRegenerate 콜백을 찾을 수 없음'), group: 30 }
         ];
 
-        allIconItems.forEach(item => {
+		allIconItems.forEach(item => {
             const isToggleOn = $(`#${item.toggleId}`).attr('data-enabled') === 'true';
             const isIconChecked = item.type === 'ghostwrite' ? true : $(`#${item.toggleId.replace('toggle', 'icon')}`).is(':checked');
 
             if (isToggleOn && isIconChecked) {
-                const positionName = item.type === 'ghostwrite' ? 'copybot_ghostwrite_position' : 'copybot_position';
-                const targetPosition = $(`input[name="${positionName}"]:checked`).val() || 'right';
+                // 각 기능별 개별 위치 설정 읽기
+                let targetPosition = 'right'; // 기본값
+                
+                if (item.type === 'ghostwrite') {
+                    // 대필은 기존 라디오 버튼 방식 유지
+                    targetPosition = $('input[name="copybot_ghostwrite_position"]:checked').val() || 'right';
+                } else {
+                    // 편의기능 3종은 각각의 드롭다운에서 위치 읽기
+                    const positionSelectId = `#${item.toggleId.replace('_toggle', '_position')}`;
+                    targetPosition = $(positionSelectId).val() || 'right';
+                }
                 
                 const icon = document.createElement('div');
                 icon.className = `fa-solid ${item.iconClass} copybot_input_field_icon`;

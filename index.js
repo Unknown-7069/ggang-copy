@@ -2,7 +2,7 @@
 // 깡갤 복사기 확장프로그램 - 모듈화된 아키텍처 시스템
 // ===================================================================
 // SillyTavern용 자동 메시지 복사 및 대필 도구
-//★릴리즈시 경로에서 -test를 제거하고 이름에서 '테스트'자 제거 필수! (참고: index.js, manifest.json, settings.html)
+//★확장 경로, 확장명 변경시 참고: index.js, manifest.json, settings.html (키워드: ggang-copy,복사기)
 //
 // === 🏗️ 모듈 구조 및 역할 ===
 //
@@ -893,7 +893,8 @@
 						executeGhostwrite: executeGhostwrite,
 						removeTagsFromElement: () => window.CopyBotCommands?.removeTagsFromElement('#send_textarea'),
 						executeSimpleCommand: (cmd, msg, callback) => window.CopyBotCommands?.executeSimpleCommand(cmd, msg, callback),
-						triggerCacheBustRegeneration: () => window.CopyBotCommands?.triggerCacheBustRegeneration()
+						triggerCacheBustRegeneration: () => window.CopyBotCommands?.triggerCacheBustRegeneration(),
+						smartDeleteAndRegenerate: () => window.CopyBotCommands?.smartDeleteAndRegenerate()
 					}
 				});
 			}

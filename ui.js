@@ -121,6 +121,16 @@
                         container.append(`<button id="${item.buttonId}" class="copybot_action_button">${item.buttonText}</button>`);
                     }
                 });
+
+                // 삭제 전 재확인 옵션 표시/숨김 로직
+                const isDeleteEnabled = $('#copybot_delete_toggle').attr('data-enabled') === 'true';
+                const isRegenEnabled = $('#copybot_delete_regenerate_toggle').attr('data-enabled') === 'true';
+                
+                if (isDeleteEnabled || isRegenEnabled) {
+                    $('#copybot_confirm_delete_item').slideDown(200);
+                } else {
+                    $('#copybot_confirm_delete_item').slideUp(200);
+                }
                 
                 if (callbacks.debugLog && isDebugMode) callbacks.debugLog(true, '동적 액션 버튼 업데이트 완료');
             } catch (error) {
@@ -562,6 +572,7 @@
                         'copybot_hq_profile_toggle': () => newState ? (callbacks.enableHighQualityProfiles && callbacks.enableHighQualityProfiles()) : (callbacks.disableHighQualityProfiles && callbacks.disableHighQualityProfiles()),
                         'copybot_remove_resize_toggle': () => newState ? (callbacks.removeResizeHandle && callbacks.removeResizeHandle()) : (callbacks.restoreResizeHandle && callbacks.restoreResizeHandle()),
                         'copybot_hide_placeholder_toggle': () => newState ? (callbacks.hidePlaceholder && callbacks.hidePlaceholder()) : (callbacks.restorePlaceholder && callbacks.restorePlaceholder()),
+                        'copybot_confirm_delete_toggle': () => { /* 설정 저장만 수행하면 되므로 추가 동작 없음 */ },
                         'copybot_debug_mode_toggle': () => { 
                             isDebugMode = newState; 
                             $('#copybot_debug_info').slideToggle(newState);
@@ -620,10 +631,43 @@
                 $('#copybot_copy_content, #copybot_remove_tags, #copybot_linebreak_fix, #copybot_save_txt, #copybot_clear_content').prop('disabled', !hasContent);
             });
 
-            $(document).off('change', '.copybot_checkbox, .copybot_radio').on('change', '.copybot_checkbox, .copybot_radio', () => {
+			$(document).off('change', '.copybot_checkbox, .copybot_radio').on('change', '.copybot_checkbox, .copybot_radio', function() {
+				// 입력필드 체크박스에 대한 위치 드롭다운 숨김/보임 처리 ===
+                const checkboxId = $(this).attr('id');
+                
+                // 입력필드 체크박스인 경우에만 처리
+                if (checkboxId === 'copybot_tag_remove_icon' || 
+                    checkboxId === 'copybot_delete_icon' || 
+                    checkboxId === 'copybot_delete_regenerate_icon') {
+                    
+                    // 해당 체크박스의 위치 드롭다운 컨테이너 찾기
+                    // HTML 구조: .copybot_settings_sub_row 안에 3개의 .copybot_settings_sub_item이 있고,
+                    // 마지막 item이 위치 드롭다운을 포함하는 컨테이너
+                    const positionContainer = $(this).closest('.copybot_settings_sub_row')
+                        .find('.copybot_settings_sub_item').last();
+                    
+                    // 체크박스 상태에 따라 위치 드롭다운 보임/숨김
+                    if ($(this).is(':checked')) {
+                        positionContainer.slideDown(200);
+                    } else {
+                        positionContainer.slideUp(200);
+                    }
+                    
+                    if (callbacks.debugLog && isDebugMode) {
+                        callbacks.debugLog(true, '입력필드 체크박스 상태 변경:', checkboxId, '→', $(this).is(':checked') ? 'ON' : 'OFF');
+                    }
+                }
+
                 if (window.CopyBotUI && window.CopyBotUI.updateActionButtons) {
                     window.CopyBotUI.updateActionButtons();
                 }
+                if (callbacks.safeUpdateInputFieldIcons) callbacks.safeUpdateInputFieldIcons();
+                if (callbacks.saveSettings) callbacks.saveSettings();
+            });
+            
+            // 편의기능 위치 드롭다운 변경 이벤트
+            $(document).off('change', '#copybot_tag_remove_position, #copybot_delete_position, #copybot_delete_regenerate_position')
+                .on('change', '#copybot_tag_remove_position, #copybot_delete_position, #copybot_delete_regenerate_position', () => {
                 if (callbacks.safeUpdateInputFieldIcons) callbacks.safeUpdateInputFieldIcons();
                 if (callbacks.saveSettings) callbacks.saveSettings();
             });
@@ -696,6 +740,32 @@
             });
 
             $(document).off('click', '#copybot_settings_panel, #copybot_ghostwrite_panel, #copybot_message_operations_panel, #copybot_misc_panel').on('click', (e) => e.stopPropagation());
+
+			// 페이지 로드 시 입력필드 체크박스 상태에 따라 위치 드롭다운 초기화
+            setTimeout(() => {
+                const inputFieldCheckboxes = [
+                    'copybot_tag_remove_icon',
+                    'copybot_delete_icon',
+                    'copybot_delete_regenerate_icon'
+                ];
+                
+                inputFieldCheckboxes.forEach(checkboxId => {
+                    const checkbox = $('#' + checkboxId);
+                    if (checkbox.length > 0) {
+                        const positionContainer = checkbox.closest('.copybot_settings_sub_row')
+                            .find('.copybot_settings_sub_item').last();
+                        
+                        // 체크박스가 체크되어 있지 않으면 위치 드롭다운 숨김
+                        if (!checkbox.is(':checked')) {
+                            positionContainer.hide();
+                        }
+                        
+                        if (callbacks.debugLog && isDebugMode) {
+                            callbacks.debugLog(true, '입력필드 체크박스 초기화:', checkboxId, '→', checkbox.is(':checked') ? 'ON (표시)' : 'OFF (숨김)');
+                        }
+                    }
+                });
+            }, 300);
 
             if (callbacks.debugLog && isDebugMode) callbacks.debugLog(true, '깡갤 복사기: 이벤트 핸들러 설정 완료');
         },
