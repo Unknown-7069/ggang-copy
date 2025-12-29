@@ -152,18 +152,23 @@
 		const executeSimpleCommand = callbacks?.executeSimpleCommand || (() => console.error('executeSimpleCommand 콜백을 찾을 수 없음'));
 		const triggerCacheBustRegeneration = callbacks?.triggerCacheBustRegeneration || (() => console.error('triggerCacheBustRegeneration 콜백을 찾을 수 없음'));
 
+        // 저장된 아이콘 또는 기본값 가져오기
+        const getIconClass = (pickerId, defaultIcon) => {
+            const $picker = $(`#${pickerId}`);
+            return $picker.length > 0 ? ($picker.data('icon') || defaultIcon) : defaultIcon;
+        };
+
         const allIconItems = [
-            { type: 'ghostwrite', toggleId: 'copybot_ghostwrite_toggle', iconClass: 'fa-user-edit', title: '캐릭터에게 대필 요청', action: executeGhostwrite, group: 20 },
-            { type: 'action', toggleId: 'copybot_tag_remove_toggle', iconClass: 'fa-tags', title: '작성중인 메시지의 태그 제거', action: () => removeTagsFromElement('#send_textarea'), group: 20 },
-            { type: 'action', toggleId: 'copybot_delete_toggle', iconClass: 'fa-trash', title: '마지막 메시지 삭제', action: () => executeSimpleCommand('/del 1', '마지막 메시지 1개를 삭제했습니다.'), group: 20 },
-            { type: 'action', toggleId: 'copybot_delete_regenerate_toggle', iconClass: 'fa-redo', title: '마지막 메시지 삭제 후 재생성', action: () => callbacks?.smartDeleteAndRegenerate?.() || console.error('smartDeleteAndRegenerate 콜백을 찾을 수 없음'), group: 30 }
+            { type: 'ghostwrite', toggleId: 'copybot_ghostwrite_toggle', iconClass: getIconClass('copybot_ghostwrite_icon_picker', 'fa-user-edit'), title: '캐릭터에게 대필 요청', action: executeGhostwrite, group: 20 },
+            { type: 'action', toggleId: 'copybot_tag_remove_toggle', iconClass: getIconClass('copybot_tag_remove_icon_picker', 'fa-tags'), title: '작성중인 메시지의 태그 제거', action: () => removeTagsFromElement('#send_textarea'), group: 20 },
+            { type: 'action', toggleId: 'copybot_delete_toggle', iconClass: getIconClass('copybot_delete_icon_picker', 'fa-trash'), title: '마지막 메시지 삭제', action: () => executeSimpleCommand('/del 1', '마지막 메시지 1개를 삭제했습니다.'), group: 20 },
+            { type: 'action', toggleId: 'copybot_delete_regenerate_toggle', iconClass: getIconClass('copybot_delete_regenerate_icon_picker', 'fa-redo'), title: '마지막 메시지 삭제 후 재생성', action: () => callbacks?.smartDeleteAndRegenerate?.() || console.error('smartDeleteAndRegenerate 콜백을 찾을 수 없음'), group: 30 }
         ];
 
 		allIconItems.forEach(item => {
             const isToggleOn = $(`#${item.toggleId}`).attr('data-enabled') === 'true';
-            const isIconChecked = item.type === 'ghostwrite' ? true : $(`#${item.toggleId.replace('toggle', 'icon')}`).is(':checked');
-
-            if (isToggleOn && isIconChecked) {
+            // 편의기능 3종은 toggle ON이면 자동으로 아이콘 표시 (체크박스 삭제됨)
+            if (isToggleOn) {
                 // 각 기능별 개별 위치 설정 읽기
                 let targetPosition = 'right'; // 기본값
                 
@@ -189,6 +194,36 @@
                 iconsByPosition[targetPosition].push(icon);
             }
         });
+
+        // === 퀵메뉴 입력필드 아이콘 추가 ===
+        const isQuickMenuEnabled = $('#copybot_quickmenu_toggle').attr('data-enabled') === 'true';
+        const isQuickMenuInputIconChecked = $('#copybot_quickmenu_input_icon').is(':checked');
+        
+        if (isQuickMenuEnabled && isQuickMenuInputIconChecked) {
+            const quickMenuPosition = $('#copybot_quickmenu_icon_position').val() || 'bottom_left';
+            const toggleQuickMenu = callbacks?.toggleQuickMenu || (() => console.error('toggleQuickMenu 콜백을 찾을 수 없음'));
+            
+            const quickMenuIconClass = getIconClass('copybot_quickmenu_input_icon_picker', 'fa-copy');
+			const quickMenuIcon = document.createElement('div');
+			quickMenuIcon.className = `fa-solid ${quickMenuIconClass} copybot_input_field_icon`;
+            quickMenuIcon.title = '퀵메뉴 열기';
+            quickMenuIcon.id = 'copybot_quickmenu_input_icon_btn';
+            
+            // 테마 스타일 적용
+            const currentStyle = window.getComputedStyle(referenceIcon);
+            quickMenuIcon.style.fontSize = currentStyle.fontSize;
+            quickMenuIcon.style.color = currentStyle.color;
+            quickMenuIcon.style.order = '15'; // 실리 기본 아이콘 뒤, 복사봇 아이콘 중 첫번째
+            
+            quickMenuIcon.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleQuickMenu(e.currentTarget);
+            });
+            
+            iconsByPosition[quickMenuPosition].push(quickMenuIcon);
+            debugLog('퀵메뉴 입력필드 아이콘 추가됨, 위치:', quickMenuPosition);
+        }
 
         for (const position in iconsByPosition) {
             const iconsToAdd = iconsByPosition[position];

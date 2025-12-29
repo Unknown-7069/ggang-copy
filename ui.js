@@ -102,26 +102,9 @@
 
         // === 동적 버튼 관리 ===
         
-        // 설정 상태에 따라 동적 버튼을 업데이트하는 함수
+        // 삭제 전 재확인 옵션 표시/숨김 관리 함수
         updateActionButtons: function() {
             try {
-                if (callbacks.debugLog && isDebugMode) callbacks.debugLog(true, '동적 액션 버튼 업데이트 시작');
-                
-                const container = $('#copybot_action_buttons');
-                container.empty();
-                
-                const actionItems = [
-                    { toggleId: 'copybot_tag_remove_toggle', checkboxId: 'copybot_tag_remove_button', buttonId: 'copybot_action_remove_tags', buttonText: '작성중 태그제거' },
-                    { toggleId: 'copybot_delete_toggle', checkboxId: 'copybot_delete_button', buttonId: 'copybot_action_delete_last', buttonText: '마지막 메세지 삭제' },
-                    { toggleId: 'copybot_delete_regenerate_toggle', checkboxId: 'copybot_delete_regenerate_button', buttonId: 'copybot_action_delete_regen', buttonText: '삭제후 재생성' }
-                ];
-
-                actionItems.forEach(item => {
-                    if ($(`#${item.toggleId}`).attr('data-enabled') === 'true' && $(`#${item.checkboxId}`).is(':checked')) {
-                        container.append(`<button id="${item.buttonId}" class="copybot_action_button">${item.buttonText}</button>`);
-                    }
-                });
-
                 // 삭제 전 재확인 옵션 표시/숨김 로직
                 const isDeleteEnabled = $('#copybot_delete_toggle').attr('data-enabled') === 'true';
                 const isRegenEnabled = $('#copybot_delete_regenerate_toggle').attr('data-enabled') === 'true';
@@ -131,8 +114,6 @@
                 } else {
                     $('#copybot_confirm_delete_item').slideUp(200);
                 }
-                
-                if (callbacks.debugLog && isDebugMode) callbacks.debugLog(true, '동적 액션 버튼 업데이트 완료');
             } catch (error) {
                 console.error('CopyBotUI: updateActionButtons 실패', error);
             }
@@ -424,6 +405,26 @@
                         toastr.error('메시지 보이기 기능을 사용할 수 없습니다.');
                     }
                 },
+                '#copybot_check_hidden': () => {
+                    const resultSpan = $('#copybot_hidden_result');
+                    
+                    // messageOperations 모듈에서 숨겨진 메시지 정보 가져오기
+                    if (window.CopyBotMessageOperations && window.CopyBotMessageOperations.getHiddenMessageRanges) {
+                        const result = window.CopyBotMessageOperations.getHiddenMessageRanges();
+                        
+                        if (result.success) {
+                            if (result.hiddenIndices.length > 0) {
+                                resultSpan.text(`${result.message}: ${result.rangeText}`).css('color', '#e8a838');
+                            } else {
+                                resultSpan.text(result.message).css('color', '#48bb78');
+                            }
+                        } else {
+                            resultSpan.text(result.message).css('color', '#e53e3e');
+                        }
+                    } else {
+                        resultSpan.text('기능을 사용할 수 없습니다.').css('color', '#e53e3e');
+                    }
+                },
                 '#copybot_multi_delete_execute': () => {
                     const startPos = parseInt($("#copybot_multi_delete_start").val());
                     const endPos = parseInt($("#copybot_multi_delete_end").val());
@@ -489,7 +490,7 @@
                 '#copybot_open_ghostwrite_button': (e) => { 
                     e.stopPropagation(); 
                     const isCurrentlyVisible = $('#copybot_ghostwrite_panel').is(':visible');
-                    $('#copybot_settings_panel, #copybot_message_operations_panel, #copybot_misc_panel').slideUp(200); 
+                    $('#copybot_settings_panel, #copybot_message_operations_panel, #copybot_misc_panel, #copybot_quickmenu_panel').slideUp(200);
                     $('#copybot_ghostwrite_panel').slideToggle(200, () => { 
                         if (callbacks.saveSettings) callbacks.saveSettings(); 
                     });
@@ -503,7 +504,7 @@
                 '#copybot_open_settings_button': (e) => { 
                     e.stopPropagation(); 
                     const isCurrentlyVisible = $('#copybot_settings_panel').is(':visible');
-                    $('#copybot_ghostwrite_panel, #copybot_message_operations_panel, #copybot_misc_panel').slideUp(200); 
+                    $('#copybot_ghostwrite_panel, #copybot_message_operations_panel, #copybot_misc_panel, #copybot_quickmenu_panel').slideUp(200);
                     $('#copybot_settings_panel').slideToggle(200, () => { 
                         if (callbacks.saveSettings) callbacks.saveSettings(); 
                     });
@@ -517,7 +518,7 @@
                 '#copybot_open_message_operations_button': (e) => { 
                     e.stopPropagation(); 
                     const isCurrentlyVisible = $('#copybot_message_operations_panel').is(':visible');
-                    $('#copybot_ghostwrite_panel, #copybot_settings_panel, #copybot_misc_panel').slideUp(200); 
+                    $('#copybot_ghostwrite_panel, #copybot_settings_panel, #copybot_misc_panel, #copybot_quickmenu_panel').slideUp(200);
                     $('#copybot_message_operations_panel').slideToggle(200, () => { 
                         if (callbacks.saveSettings) callbacks.saveSettings(); 
                     });
@@ -531,7 +532,7 @@
                 '#copybot_open_misc_button': (e) => { 
                     e.stopPropagation(); 
                     const isCurrentlyVisible = $('#copybot_misc_panel').is(':visible');
-                    $('#copybot_ghostwrite_panel, #copybot_settings_panel, #copybot_message_operations_panel').slideUp(200); 
+                    $('#copybot_ghostwrite_panel, #copybot_settings_panel, #copybot_message_operations_panel, #copybot_quickmenu_panel').slideUp(200); 
                     $('#copybot_misc_panel').slideToggle(200, () => { 
                         if (callbacks.saveSettings) callbacks.saveSettings(); 
                     });
@@ -552,6 +553,12 @@
                     const actions = {
                         'copybot_ghostwrite_toggle': () => {
 						$('#copybot_ghostwrite_position_options, #copybot_ghostwrite_textbox, #copybot_ghostwrite_exclude_container, #copybot_ghostwrite_panel .copybot_description').slideToggle(newState);
+						// 대필 아이콘 피커 표시/숨김
+						if (newState) {
+							$('#copybot_ghostwrite_icon_picker').show();
+						} else {
+							$('#copybot_ghostwrite_icon_picker').hide();
+						}
 						// 대필 기능 OFF시 임시대필칸도 제거
 						if (!newState && window.CopyBotGhostwrite && window.CopyBotGhostwrite.removeTempPromptField) {
 							window.CopyBotGhostwrite.removeTempPromptField();
@@ -579,6 +586,14 @@
                             // commands 모듈에도 디버그 모드 상태 전달
                             if (callbacks.setDebugMode) {
                                 callbacks.setDebugMode(newState);
+                            }
+                        },
+                        'copybot_quickmenu_toggle': () => {
+                            // 접근 방식 옵션 표시/숨김
+                            if (newState) {
+                                $('#copybot_quickmenu_access_options').slideDown(200);
+                            } else {
+                                $('#copybot_quickmenu_access_options').slideUp(200);
                             }
                         },
                     };
@@ -632,31 +647,6 @@
             });
 
 			$(document).off('change', '.copybot_checkbox, .copybot_radio').on('change', '.copybot_checkbox, .copybot_radio', function() {
-				// 입력필드 체크박스에 대한 위치 드롭다운 숨김/보임 처리 ===
-                const checkboxId = $(this).attr('id');
-                
-                // 입력필드 체크박스인 경우에만 처리
-                if (checkboxId === 'copybot_tag_remove_icon' || 
-                    checkboxId === 'copybot_delete_icon' || 
-                    checkboxId === 'copybot_delete_regenerate_icon') {
-                    
-                    // 해당 체크박스의 위치 드롭다운 컨테이너 찾기
-                    // HTML 구조: .copybot_settings_sub_row 안에 3개의 .copybot_settings_sub_item이 있고,
-                    // 마지막 item이 위치 드롭다운을 포함하는 컨테이너
-                    const positionContainer = $(this).closest('.copybot_settings_sub_row')
-                        .find('.copybot_settings_sub_item').last();
-                    
-                    // 체크박스 상태에 따라 위치 드롭다운 보임/숨김
-                    if ($(this).is(':checked')) {
-                        positionContainer.slideDown(200);
-                    } else {
-                        positionContainer.slideUp(200);
-                    }
-                    
-                    if (callbacks.debugLog && isDebugMode) {
-                        callbacks.debugLog(true, '입력필드 체크박스 상태 변경:', checkboxId, '→', $(this).is(':checked') ? 'ON' : 'OFF');
-                    }
-                }
 
                 if (window.CopyBotUI && window.CopyBotUI.updateActionButtons) {
                     window.CopyBotUI.updateActionButtons();
@@ -666,11 +656,89 @@
             });
             
             // 편의기능 위치 드롭다운 변경 이벤트
-            $(document).off('change', '#copybot_tag_remove_position, #copybot_delete_position, #copybot_delete_regenerate_position')
-                .on('change', '#copybot_tag_remove_position, #copybot_delete_position, #copybot_delete_regenerate_position', () => {
-                if (callbacks.safeUpdateInputFieldIcons) callbacks.safeUpdateInputFieldIcons();
-                if (callbacks.saveSettings) callbacks.saveSettings();
-            });
+			$(document).off('change', '#copybot_tag_remove_position, #copybot_delete_position, #copybot_delete_regenerate_position')
+				.on('change', '#copybot_tag_remove_position, #copybot_delete_position, #copybot_delete_regenerate_position', () => {
+				if (callbacks.safeUpdateInputFieldIcons) callbacks.safeUpdateInputFieldIcons();
+				if (callbacks.saveSettings) callbacks.saveSettings();
+			});
+
+			// ===== 퀵메뉴 설정 이벤트 핸들러 =====
+
+			// 퀵메뉴 버튼 클릭 - 패널 토글
+			$(document).off('click', '#copybot_open_quickmenu_button').on('click', '#copybot_open_quickmenu_button', function() {
+				const $quickmenuPanel = $('#copybot_quickmenu_panel');
+				const isVisible = $quickmenuPanel.is(':visible');
+				
+				// 모든 설정 패널 닫기
+				$('.copybot_settings_panel').slideUp(200);
+				$('.copybot_settings_button').removeClass('active');
+				
+				// 퀵메뉴 패널 토글
+				if (!isVisible) {
+					$quickmenuPanel.slideDown(200);
+					$(this).addClass('active');
+				}
+				
+				if (callbacks.debugLog && isDebugMode) callbacks.debugLog(true, '퀵메뉴 패널 토글:', !isVisible ? 'ON' : 'OFF');
+			});
+
+			// 퀵메뉴 접근 방식 체크박스 변경
+			$(document).off('change', '#copybot_quickmenu_wand, #copybot_quickmenu_input_icon').on('change', '#copybot_quickmenu_wand, #copybot_quickmenu_input_icon', function() {
+				const checkboxId = $(this).attr('id');
+				const isChecked = $(this).is(':checked');
+				
+				// 마법봉 체크박스인 경우 아이콘 피커 표시/숨김
+				if (checkboxId === 'copybot_quickmenu_wand') {
+					if (isChecked) {
+						$('#copybot_quickmenu_wand_icon_picker').show();
+					} else {
+						$('#copybot_quickmenu_wand_icon_picker').hide();
+					}
+				}
+
+				// 입력필드 아이콘 체크박스인 경우 위치 드롭다운 및 아이콘 피커 표시/숨김
+				if (checkboxId === 'copybot_quickmenu_input_icon') {
+					if (isChecked) {
+						$('#copybot_quickmenu_position_container').slideDown(200);
+						$('#copybot_quickmenu_input_icon_picker').show();
+					} else {
+						$('#copybot_quickmenu_position_container').slideUp(200);
+						$('#copybot_quickmenu_input_icon_picker').hide();
+					}
+				}
+				
+				if (callbacks.saveSettings) callbacks.saveSettings();
+				// 아이콘 업데이트 (입력필드 아이콘 표시/숨김)
+				if (callbacks.updateInputFieldIcons) {
+					setTimeout(() => callbacks.updateInputFieldIcons(), 100);
+				}
+				if (callbacks.debugLog && isDebugMode) callbacks.debugLog(true, '퀵메뉴 접근 방식 변경:', checkboxId, '→', isChecked ? 'ON' : 'OFF');
+			});
+
+			// 퀵메뉴 섹션 체크박스 변경
+			$(document).off('change', '[id^="copybot_qm_section_"]').on('change', '[id^="copybot_qm_section_"]', function() {
+				const sectionId = $(this).attr('id').replace('copybot_qm_section_', '');
+				const isChecked = $(this).is(':checked');
+				
+				// 섹션 표시/숨김 즉시 적용
+				if (window.CopyBotWandMenu && window.CopyBotWandMenu.applySectionVisibility) {
+					window.CopyBotWandMenu.applySectionVisibility();
+				}
+				
+				if (callbacks.saveSettings) callbacks.saveSettings();
+				if (callbacks.debugLog && isDebugMode) callbacks.debugLog(true, '퀵메뉴 섹션 변경:', sectionId, '→', isChecked ? 'ON' : 'OFF');
+			});
+
+			// 퀵메뉴 입력필드 위치 드롭다운 변경
+			$(document).off('change', '#copybot_quickmenu_icon_position').on('change', '#copybot_quickmenu_icon_position', function() {
+				const position = $(this).val();
+				if (callbacks.saveSettings) callbacks.saveSettings();
+				// 아이콘 위치 변경 즉시 적용
+				if (callbacks.updateInputFieldIcons) {
+					setTimeout(() => callbacks.updateInputFieldIcons(), 100);
+				}
+				if (callbacks.debugLog && isDebugMode) callbacks.debugLog(true, '퀵메뉴 아이콘 위치 변경:', position);
+			});
             
             // 하이브리드 자동저장 - 대필 기본 지시문 텍스트박스 이벤트 (일관성을 위해 동일하게 수정)
             $(document).off('input focus blur', '#copybot_ghostwrite_textbox'); // 기존 모든 핸들러 제거
@@ -739,33 +807,90 @@
                 }
             });
 
+			// === 아이콘 피커 클릭 이벤트 (편의기능 3종) ===
+            $(document).off('click', '.copybot_icon_picker').on('click', '.copybot_icon_picker', async function() {
+                const $picker = $(this);
+                const currentIcon = $picker.data('icon') || $picker.attr('data-default');
+                const defaultIcon = $picker.attr('data-default');
+                
+                try {
+                    // ST 내장 아이콘 피커 동적 import
+                    const { showFontAwesomePicker } = await import('/scripts/utils.js');
+                    
+                    // 피커 열리면 "No Icon" 버튼을 "기본값"으로 변경
+                    setTimeout(() => {
+                        const noIconBtn = document.querySelector('.popup .popup-button-ok');
+                        if (noIconBtn && noIconBtn.textContent.trim() === 'No Icon') {
+                            noIconBtn.textContent = '기본값';
+                        }
+                    }, 50);
+                    
+                    const selectedIcon = await showFontAwesomePicker();
+                    
+                    // 취소 (null)이면 무시
+                    if (selectedIcon === null) {
+                        if (callbacks.debugLog && isDebugMode) {
+                            callbacks.debugLog(true, '아이콘 선택 취소됨');
+                        }
+                        return;
+                    }
+                    
+                    // 빈 문자열 = "기본값" 버튼 클릭 → 디폴트 아이콘으로 복원
+                    const newIcon = selectedIcon === '' ? defaultIcon : selectedIcon;
+                    
+                    // 인라인 피커 여부 먼저 확인 (removeClass 전에!)
+					const pickerId = $picker.attr('id') || '';
+					const isInlinePicker = $picker.hasClass('copybot_inline_icon_picker');
+
+					// 새 아이콘 적용
+					$picker
+						.removeClass()
+						.addClass(`fa-solid ${newIcon} copybot_icon_picker${isInlinePicker ? ' copybot_inline_icon_picker' : ''}`)
+						.data('icon', newIcon);
+
+					// 설정 저장
+					if (window.CopyBotSettings && window.CopyBotSettings.saveSettings) {
+						window.CopyBotSettings.saveSettings();
+					}
+
+					// 입력필드 아이콘 업데이트
+					if (window.CopyBotIcons && window.CopyBotIcons.updateInputFieldIcons) {
+						window.CopyBotIcons.updateInputFieldIcons();
+					}
+
+					// 마법봉 아이콘 피커인 경우 Extensions 메뉴 갱신
+					if (pickerId === 'copybot_quickmenu_wand_icon_picker') {
+						if (window.CopyBotWandMenu && window.CopyBotWandMenu.registerWandMenu) {
+							$('#copybot_wand_container').remove();
+							window.CopyBotWandMenu.registerWandMenu();
+						}
+					}
+
+					// 편의기능 아이콘 피커인 경우 퀵메뉴 팝업 아이콘도 갱신
+					const convenienceIconPickers = [
+						'copybot_tag_remove_icon_picker',
+						'copybot_delete_icon_picker',
+						'copybot_delete_regenerate_icon_picker'
+					];
+					if (convenienceIconPickers.includes(pickerId)) {
+						if (window.CopyBotWandMenu && window.CopyBotWandMenu.updateQuickMenuIcons) {
+							window.CopyBotWandMenu.updateQuickMenuIcons();
+						}
+					}
+                    
+                    if (callbacks.debugLog && isDebugMode) {
+                        const action = selectedIcon === '' ? '기본값 복원' : '변경';
+                        callbacks.debugLog(true, `아이콘 ${action}:`, currentIcon, '→', newIcon);
+                    }
+                    
+                } catch (error) {
+                    console.error('깡갤 복사기: 아이콘 피커 호출 실패', error);
+                    toastr.error('아이콘 선택창을 열 수 없습니다.');
+                }
+            });
+
             $(document).off('click', '#copybot_settings_panel, #copybot_ghostwrite_panel, #copybot_message_operations_panel, #copybot_misc_panel').on('click', (e) => e.stopPropagation());
 
-			// 페이지 로드 시 입력필드 체크박스 상태에 따라 위치 드롭다운 초기화
-            setTimeout(() => {
-                const inputFieldCheckboxes = [
-                    'copybot_tag_remove_icon',
-                    'copybot_delete_icon',
-                    'copybot_delete_regenerate_icon'
-                ];
-                
-                inputFieldCheckboxes.forEach(checkboxId => {
-                    const checkbox = $('#' + checkboxId);
-                    if (checkbox.length > 0) {
-                        const positionContainer = checkbox.closest('.copybot_settings_sub_row')
-                            .find('.copybot_settings_sub_item').last();
-                        
-                        // 체크박스가 체크되어 있지 않으면 위치 드롭다운 숨김
-                        if (!checkbox.is(':checked')) {
-                            positionContainer.hide();
-                        }
-                        
-                        if (callbacks.debugLog && isDebugMode) {
-                            callbacks.debugLog(true, '입력필드 체크박스 초기화:', checkboxId, '→', checkbox.is(':checked') ? 'ON (표시)' : 'OFF (숨김)');
-                        }
-                    }
-                });
-            }, 300);
 
             if (callbacks.debugLog && isDebugMode) callbacks.debugLog(true, '깡갤 복사기: 이벤트 핸들러 설정 완료');
         },

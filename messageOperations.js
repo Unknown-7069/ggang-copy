@@ -92,6 +92,84 @@
             }
         },
 
+        // === 숨겨진 메시지 구간 체크 기능 ===
+        
+        // 숨겨진 메시지 인덱스 배열 반환 (is_system 기반)
+        getHiddenMessageRanges: function() {
+            try {
+                const utils = this.dependencies.utils;
+                
+                // SillyTavern context에서 채팅 데이터 가져오기
+                const context = typeof SillyTavern !== 'undefined' && SillyTavern.getContext 
+                    ? SillyTavern.getContext() 
+                    : null;
+                
+                if (!context || !context.chat || context.chat.length === 0) {
+                    return {
+                        success: false,
+                        message: '채팅이 없습니다.',
+                        hiddenIndices: [],
+                        rangeText: ''
+                    };
+                }
+                
+                // is_system === true인 메시지 찾기 (SillyTavern 숨김 메커니즘)
+                const hiddenIndices = [];
+                context.chat.forEach((msg, index) => {
+                    if (msg.is_system === true) {
+                        hiddenIndices.push(index);
+                    }
+                });
+                
+                if (hiddenIndices.length === 0) {
+                    return {
+                        success: true,
+                        message: '숨겨진 메시지가 없습니다.',
+                        hiddenIndices: [],
+                        rangeText: ''
+                    };
+                }
+                
+                // 연속 구간 병합 (예: [1,2,3,5,6] → "1~3, 5~6")
+                const ranges = [];
+                let rangeStart = hiddenIndices[0];
+                let rangeEnd = hiddenIndices[0];
+                
+                for (let i = 1; i < hiddenIndices.length; i++) {
+                    if (hiddenIndices[i] === rangeEnd + 1) {
+                        rangeEnd = hiddenIndices[i];
+                    } else {
+                        ranges.push(rangeStart === rangeEnd ? `${rangeStart}` : `${rangeStart}~${rangeEnd}`);
+                        rangeStart = hiddenIndices[i];
+                        rangeEnd = hiddenIndices[i];
+                    }
+                }
+                ranges.push(rangeStart === rangeEnd ? `${rangeStart}` : `${rangeStart}~${rangeEnd}`);
+                
+                const rangeText = ranges.join(', ');
+                
+                if (utils && utils.debugLog) {
+                    utils.debugLog(window.copybot_debug_mode, `messageOperations: 숨겨진 메시지 ${hiddenIndices.length}개 발견 - ${rangeText}`);
+                }
+                
+                return {
+                    success: true,
+                    message: `숨겨진 메시지 ${hiddenIndices.length}개`,
+                    hiddenIndices: hiddenIndices,
+                    rangeText: rangeText
+                };
+                
+            } catch (error) {
+                console.error('깡갤 복사기: 숨겨진 메시지 조회 실패', error);
+                return {
+                    success: false,
+                    message: '조회 중 오류가 발생했습니다.',
+                    hiddenIndices: [],
+                    rangeText: ''
+                };
+            }
+        },
+
         // === 메시지 숨기기/보이기 기능 ===
         
         // /hide 명령어 실행

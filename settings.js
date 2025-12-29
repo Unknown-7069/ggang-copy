@@ -19,7 +19,8 @@
                         text: $('#copybot_ghostwrite_textbox').val() || '',
                         excludeText: $('#copybot_ghostwrite_exclude_textbox').val() || '',
                         position: $('input[name="copybot_ghostwrite_position"]:checked').val() || 'right',
-                        useTempField: $('#copybot_temp_field_toggle').attr('data-enabled') === 'true',
+						iconClass: $('#copybot_ghostwrite_icon_picker').data('icon') || 'fa-user-edit',
+						useTempField: $('#copybot_temp_field_toggle').attr('data-enabled') === 'true',
                         profile: $('#copybot_ghostwrite_profile_select').val() || 'default',
                         // 프리셋 시스템 통합 (컨텍스트 안전한 방식)
                         presets: window.CopyBotSettings.getPresetsFromNewSystem(), // 현재 프리셋 배열
@@ -27,29 +28,41 @@
                     },
                     tagRemove: {
                         enabled: $('#copybot_tag_remove_toggle').attr('data-enabled') === 'true',
-                        button: $('#copybot_tag_remove_button').is(':checked'),
-                        icon: $('#copybot_tag_remove_icon').is(':checked'),
-                        position: $('#copybot_tag_remove_position').val() || 'bottom_left'
+                        position: $('#copybot_tag_remove_position').val() || 'bottom_left',
+                        iconClass: $('#copybot_tag_remove_icon_picker').data('icon') || 'fa-tags'
                     },
                     delete: {
                         enabled: $('#copybot_delete_toggle').attr('data-enabled') === 'true',
-                        button: $('#copybot_delete_button').is(':checked'),
-                        icon: $('#copybot_delete_icon').is(':checked'),
-                        position: $('#copybot_delete_position').val() || 'bottom_left'
+                        position: $('#copybot_delete_position').val() || 'bottom_left',
+                        iconClass: $('#copybot_delete_icon_picker').data('icon') || 'fa-trash'
                     },
                     deleteRegenerate: {
                         enabled: $('#copybot_delete_regenerate_toggle').attr('data-enabled') === 'true',
-                        button: $('#copybot_delete_regenerate_button').is(':checked'),
-                        icon: $('#copybot_delete_regenerate_icon').is(':checked'),
-                        position: $('#copybot_delete_regenerate_position').val() || 'bottom_left'
+                        position: $('#copybot_delete_regenerate_position').val() || 'bottom_left',
+                        iconClass: $('#copybot_delete_regenerate_icon_picker').data('icon') || 'fa-redo'
                     },
-                    misc: {
-                        hqProfile: $('#copybot_hq_profile_toggle').attr('data-enabled') === 'true',
-                        removeResize: $('#copybot_remove_resize_toggle').attr('data-enabled') === 'true',
-                        debugMode: $('#copybot_debug_mode_toggle').attr('data-enabled') === 'true',
-                        hidePlaceholder: $('#copybot_hide_placeholder_toggle').attr('data-enabled') === 'true',
-                        confirmDelete: $('#copybot_confirm_delete_toggle').attr('data-enabled') === 'true'
-                    }
+                    quickMenu: {
+						enabled: $('#copybot_quickmenu_toggle').attr('data-enabled') === 'true',
+						accessWand: $('#copybot_quickmenu_wand').is(':checked'),
+						accessInputIcon: $('#copybot_quickmenu_input_icon').is(':checked'),
+						inputIconPosition: $('#copybot_quickmenu_icon_position').val() || 'bottom_left',
+						wandIconClass: $('#copybot_quickmenu_wand_icon_picker').data('icon') || 'fa-clipboard',
+						inputIconClass: $('#copybot_quickmenu_input_icon_picker').data('icon') || 'fa-clipboard',
+						sections: {
+							jump: $('#copybot_qm_section_jump').is(':checked'),
+							write: $('#copybot_qm_section_write').is(':checked'),
+							copy: $('#copybot_qm_section_copy').is(':checked'),
+							hide: $('#copybot_qm_section_hide').is(':checked'),
+							multi_delete: $('#copybot_qm_section_multi_delete').is(':checked')
+						}
+					},
+					misc: {
+						hqProfile: $('#copybot_hq_profile_toggle').attr('data-enabled') === 'true',
+						removeResize: $('#copybot_remove_resize_toggle').attr('data-enabled') === 'true',
+						debugMode: $('#copybot_debug_mode_toggle').attr('data-enabled') === 'true',
+						hidePlaceholder: $('#copybot_hide_placeholder_toggle').attr('data-enabled') === 'true',
+						confirmDelete: $('#copybot_confirm_delete_toggle').attr('data-enabled') === 'true'
+					}
                 };
                 
                 // 다중 백업 저장으로 설정 유지 강화
@@ -158,8 +171,22 @@
                     $('#copybot_ghostwrite_exclude_textbox').val(settings.ghostwrite.excludeText || '');
                     
                     if (settings.ghostwrite.position) {
-                        $(`input[name="copybot_ghostwrite_position"][value="${settings.ghostwrite.position}"]`).prop('checked', true);
-                    }
+						$(`input[name="copybot_ghostwrite_position"][value="${settings.ghostwrite.position}"]`).prop('checked', true);
+					}
+
+					// 대필 아이콘 클래스 로드
+					if (settings.ghostwrite.iconClass) {
+						const $picker = $('#copybot_ghostwrite_icon_picker');
+						$picker
+							.removeClass()
+							.addClass(`fa-solid ${settings.ghostwrite.iconClass} copybot_icon_picker copybot_inline_icon_picker`)
+							.data('icon', settings.ghostwrite.iconClass);
+					}
+
+					// 대필 아이콘 피커 표시/숨김 (토글 상태에 따라)
+					if (settings.ghostwrite.enabled) {
+						$('#copybot_ghostwrite_icon_picker').show();
+					}
                     
                     // 대필 프로필 설정 로드 (타이밍 개선)
                     if (settings.ghostwrite.profile) {
@@ -189,23 +216,35 @@
                 $('#copybot_delete_toggle').attr('data-enabled', settings.delete.enabled).text(settings.delete.enabled ? 'ON' : 'OFF');
                 $('#copybot_delete_regenerate_toggle').attr('data-enabled', settings.deleteRegenerate.enabled).text(settings.deleteRegenerate.enabled ? 'ON' : 'OFF');
 
-				$('#copybot_tag_remove_button').prop('checked', settings.tagRemove.button);
-                $('#copybot_tag_remove_icon').prop('checked', settings.tagRemove.icon);
-                if (settings.tagRemove.position) {
+				if (settings.tagRemove.position) {
                     $('#copybot_tag_remove_position').val(settings.tagRemove.position);
                 }
+                // 태그제거 아이콘 로드
+                const tagRemoveIcon = settings.tagRemove.iconClass || 'fa-tags';
+                $('#copybot_tag_remove_icon_picker')
+                    .removeClass()
+                    .addClass(`fa-solid ${tagRemoveIcon} copybot_icon_picker`)
+                    .data('icon', tagRemoveIcon);
                 
-                $('#copybot_delete_button').prop('checked', settings.delete.button);
-                $('#copybot_delete_icon').prop('checked', settings.delete.icon);
                 if (settings.delete.position) {
                     $('#copybot_delete_position').val(settings.delete.position);
                 }
+                // 삭제 아이콘 로드
+                const deleteIcon = settings.delete.iconClass || 'fa-trash';
+                $('#copybot_delete_icon_picker')
+                    .removeClass()
+                    .addClass(`fa-solid ${deleteIcon} copybot_icon_picker`)
+                    .data('icon', deleteIcon);
                 
-                $('#copybot_delete_regenerate_button').prop('checked', settings.deleteRegenerate.button);
-                $('#copybot_delete_regenerate_icon').prop('checked', settings.deleteRegenerate.icon);
                 if (settings.deleteRegenerate.position) {
                     $('#copybot_delete_regenerate_position').val(settings.deleteRegenerate.position);
                 }
+                // 재생성 아이콘 로드
+                const regenIcon = settings.deleteRegenerate.iconClass || 'fa-redo';
+                $('#copybot_delete_regenerate_icon_picker')
+                    .removeClass()
+                    .addClass(`fa-solid ${regenIcon} copybot_icon_picker`)
+                    .data('icon', regenIcon);
 
                 if (settings.tagRemove.enabled) $('#copybot_tag_remove_options').show(); else $('#copybot_tag_remove_options').hide();
                 if (settings.delete.enabled) $('#copybot_delete_options').show(); else $('#copybot_delete_options').hide();
@@ -251,7 +290,78 @@
                     }
                 }
 
-                // 설정 로드 후 프리셋 관련 UI 업데이트 (순서 개선)
+                // 퀵메뉴 설정 로드
+				if (settings.quickMenu) {
+					const isQuickMenuEnabled = settings.quickMenu.enabled === true;
+					$('#copybot_quickmenu_toggle').attr('data-enabled', isQuickMenuEnabled).text(isQuickMenuEnabled ? 'ON' : 'OFF');
+					
+					// 접근 방식 체크박스 복원
+					$('#copybot_quickmenu_wand').prop('checked', settings.quickMenu.accessWand === true);
+					$('#copybot_quickmenu_input_icon').prop('checked', settings.quickMenu.accessInputIcon === true);
+					
+					// 위치 드롭다운 복원
+					if (settings.quickMenu.inputIconPosition) {
+						$('#copybot_quickmenu_icon_position').val(settings.quickMenu.inputIconPosition);
+					}
+					
+					// 퀵메뉴 ON/OFF에 따른 접근방식 옵션 표시/숨김
+					if (isQuickMenuEnabled) {
+						$('#copybot_quickmenu_access_options').show();
+						// 입력필드 아이콘 체크 시 위치 드롭다운 표시
+						if (settings.quickMenu.accessInputIcon) {
+							$('#copybot_quickmenu_position_container').show();
+							$('#copybot_quickmenu_input_icon_picker').show();
+						}
+
+						// 마법봉 체크 시 아이콘 피커 표시
+						if (settings.quickMenu.accessWand) {
+							$('#copybot_quickmenu_wand_icon_picker').show();
+						}
+
+						// 마법봉 아이콘 클래스 로드
+						if (settings.quickMenu.wandIconClass) {
+							const $wandPicker = $('#copybot_quickmenu_wand_icon_picker');
+							$wandPicker
+								.removeClass()
+								.addClass(`fa-solid ${settings.quickMenu.wandIconClass} copybot_icon_picker copybot_inline_icon_picker`)
+								.data('icon', settings.quickMenu.wandIconClass);
+						}
+
+						// 입력필드 아이콘 클래스 로드
+						if (settings.quickMenu.inputIconClass) {
+							const $inputPicker = $('#copybot_quickmenu_input_icon_picker');
+							$inputPicker
+								.removeClass()
+								.addClass(`fa-solid ${settings.quickMenu.inputIconClass} copybot_icon_picker copybot_inline_icon_picker`)
+								.data('icon', settings.quickMenu.inputIconClass);
+						}
+					} else {
+						$('#copybot_quickmenu_access_options').hide();
+					}
+					
+					// 섹션 표시 설정 로드 (기본값: 모두 ON)
+					if (settings.quickMenu.sections) {
+						const sections = settings.quickMenu.sections;
+						$('#copybot_qm_section_jump').prop('checked', sections.jump !== false);
+						$('#copybot_qm_section_write').prop('checked', sections.write !== false);
+						$('#copybot_qm_section_copy').prop('checked', sections.copy !== false);
+						$('#copybot_qm_section_hide').prop('checked', sections.hide !== false);
+						$('#copybot_qm_section_multi_delete').prop('checked', sections.multi_delete !== false);
+					}
+
+					// 퀵메뉴 섹션 표시/숨김 적용
+					if (window.CopyBotWandMenu && window.CopyBotWandMenu.applySectionVisibility) {
+						setTimeout(() => {
+							window.CopyBotWandMenu.applySectionVisibility();
+						}, 100);
+					}
+
+					if (window.CopyBotUtils) {
+						window.CopyBotUtils.debugLog(window.copybot_debug_mode, '퀵메뉴 설정 로드:', settings.quickMenu);
+					}
+				}
+
+				// 설정 로드 후 프리셋 관련 UI 업데이트 (순서 개선)
                 if (callbacks && callbacks.updatePresetDropdown) {
                     setTimeout(() => {
                         callbacks.updatePresetDropdown();

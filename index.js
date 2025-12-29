@@ -70,6 +70,15 @@
 //   • 의존성: utils.js, commands.js
 //   • 특징: 철저한 입력 유효성 검사, 안전한 삭제 확인, SillyTavern 명령어 시스템 연동, 확장 가능한 구조
 //
+// 📦 wandMenu.js (마법봉 퀵메뉴) 🪄 퀵 액세스 모듈
+//   • 역할: Extensions 메뉴 내 깡갤 복사기 퀵메뉴 등록 및 관리, 고정/미니 모드 지원
+//   • 함수: registerWandMenu(), toggleQuickMenu(), showQuickMenu(), hideQuickMenu(), handleQuickAction()
+//     - 메뉴관리: registerWandMenu() (마법봉 메뉴 등록), createQuickMenuPopup() (팝업 생성)
+//     - 퀵액션: handleQuickAction() (이동/복사/삭제/숨기기 등 빠른 실행)
+//     - 상태관리: 고정모드(isPinned), 미니모드(isMiniMode) 전환 및 localStorage 저장
+//   • 의존성: utils.js
+//   • 특징: Extensions 메뉴 통합, 아이콘 개인화 지원, 입력필드 아이콘과 팝업 공유
+//
 // 📦 ui.js (UI 이벤트 및 상호작용 관리) 🎯 통합 UI 컨트롤러
 //   • 역할: 모든 UI 이벤트 핸들링, 동적 버튼 관리, 사용자 상호작용 제어, 모듈 간 UI 통신 중계
 //   • 함수: setupEventHandlers(), updateActionButtons()
@@ -96,6 +105,7 @@
 //   • 유틸리티 함수 (로그, HTML처리, 계산) → utils.js 수정
 //   • 명령어 실행, 텍스트 처리, 클립보드 → commands.js 수정
 //   • 아이콘 업데이트, DOM 안정성, 테마 적응형 스타일링 → icons.js 수정
+//   • 마법봉 퀵메뉴, Extensions 메뉴 통합, 퀵액션 → wandMenu.js 수정
 //   • 모든 UI 이벤트 핸들링, 동적 버튼, 사용자 상호작용 → ui.js 수정 ⭐ 통합 UI 관리자
 //   • 모듈 로딩, 초기화 순서, 콜백 주입 시스템 → index.js 확인
 //   • UI 템플릿 변경 → settings.html 수정
@@ -147,7 +157,7 @@
 //
 // 📍 확장성 고려사항:
 //   • 새 모듈 추가 시: window.CopyBot[ModuleName] 네이밍 규칙 준수
-//   • 의존성 순서: utils → settings → presets → commands → icons → profiles → ghostwrite → messageOperations → ui → [새모듈] → index
+//   • 의존성 순서: utils → settings → presets → commands → icons → profiles → ghostwrite → messageOperations → wandMenu → ui → [새모듈] → index
 //   • UI 관련 모듈은 ui.js 이후에 로드, 비UI 모듈은 ui.js 이전에 로드
 //   • 에러 핸들링: 모든 공개 함수는 try-catch 필수
 //   • 하위 호환성: 기존 함수명 유지, 새 기능은 옵션 파라미터로
@@ -160,163 +170,66 @@
 (function() {
         'use strict';
 
-    debugLog('🔥 깡갤 복사기: 스크립트 로드 시작!');
-
-    let isInitialized = false;
-	
+    // ===================================================================
+    // 🎯 테스트/정식 버전 전환 스위치 (이 한 줄만 수정하세요!)
+    // ===================================================================
+    
+    // ⚠️ 중요: isDebugMode는 debugLog보다 먼저 선언되어야 함 (TDZ 방지)
     let isDebugMode = false;
-	// utils.js 모듈 로드 함수
-    async function loadUtilsModule() {
+    let isInitialized = false;
+    
+    const IS_TEST_VERSION = false; // 테스트할 때: true, 정식배포: false
+    
+    // 자동 설정 (아래는 수정 금지)
+    const EXTENSION_FOLDER = IS_TEST_VERSION ? 'ggang-copy-test' : 'ggang-copy';
+    const EXTENSION_NAME = IS_TEST_VERSION ? '📋 깡갤 복사기(테스트)' : '📋 깡갤 복사기';
+    const BASE_PATH = `/scripts/extensions/third-party/${EXTENSION_FOLDER}`;
+    // ===================================================================
+
+    console.log(`🔥 ${EXTENSION_NAME}: 스크립트 로드 시작! (경로: ${BASE_PATH})`);
+
+    // 🔒 안전장치: 플래그와 폴더명 불일치 경고
+    if ((EXTENSION_FOLDER.includes('test') && !IS_TEST_VERSION) ||
+        (!EXTENSION_FOLDER.includes('test') && IS_TEST_VERSION)) {
+        console.warn(`⚠️ [${EXTENSION_NAME}] 경고: 플래그와 폴더명이 불일치합니다!`, {
+            IS_TEST_VERSION,
+            EXTENSION_FOLDER,
+            예상동작: IS_TEST_VERSION ? '테스트 모드로 작동' : '정식 모드로 작동'
+        });
+    }
+	
+	// ===================================================================
+    // 📦 모듈 로더 (경로 자동화 적용)
+    // ===================================================================
+    
+    // 공통 로더 함수 (코드 중복 제거)
+    function createModuleLoader(fileName) {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = '/scripts/extensions/third-party/ggang-copy/utils.js';
+            script.src = `${BASE_PATH}/${fileName}`;
             script.onload = () => {
-                debugLog('깡갤 복사기: utils.js 로드 완료');
+                debugLog(`${EXTENSION_NAME}: ${fileName} 로드 완료`);
                 resolve();
             };
             script.onerror = (error) => {
-                console.error('깡갤 복사기: utils.js 로드 실패', error);
+                console.error(`${EXTENSION_NAME}: ${fileName} 로드 실패`, error);
                 reject(error);
             };
             document.head.appendChild(script);
         });
     }
 
-    // settings.js 모듈 로드 함수
-    async function loadSettingsModule() {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = '/scripts/extensions/third-party/ggang-copy/settings.js';
-            script.onload = () => {
-                debugLog('깡갤 복사기: settings.js 로드 완료');
-                resolve();
-            };
-            script.onerror = (error) => {
-                console.error('깡갤 복사기: settings.js 로드 실패', error);
-                reject(error);
-            };
-            document.head.appendChild(script);
-        });
-    }
-
-    // presets.js 모듈 로드 함수
-    async function loadPresetsModule() {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = '/scripts/extensions/third-party/ggang-copy/presets.js';
-            script.onload = () => {
-                debugLog('깡갤 복사기: presets.js 로드 완료');
-                resolve();
-            };
-            script.onerror = (error) => {
-                console.error('깡갤 복사기: presets.js 로드 실패', error);
-                reject(error);
-            };
-            document.head.appendChild(script);
-        });
-    }
-
-    // commands.js 모듈 로드 함수
-    async function loadCommandsModule() {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = '/scripts/extensions/third-party/ggang-copy/commands.js';
-            script.onload = () => {
-                debugLog('깡갤 복사기: commands.js 로드 완료');
-                resolve();
-            };
-            script.onerror = (error) => {
-                console.error('깡갤 복사기: commands.js 로드 실패', error);
-                reject(error);
-            };
-            document.head.appendChild(script);
-        });
-    }
-
-	// icons.js 모듈 로드 함수
-	async function loadIconsModule() {
-		return new Promise((resolve, reject) => {
-			const script = document.createElement('script');
-			script.src = '/scripts/extensions/third-party/ggang-copy/icons.js';
-			script.onload = () => {
-				debugLog('깡갤 복사기: icons.js 로드 완료');
-				resolve();
-			};
-			script.onerror = (error) => {
-				console.error('깡갤 복사기: icons.js 로드 실패', error);
-				reject(error);
-			};
-			document.head.appendChild(script);
-		});
-	}
-
-	// profiles.js 모듈 로드 함수
-	async function loadProfilesModule() {
-		return new Promise((resolve, reject) => {
-			const script = document.createElement('script');
-			script.src = '/scripts/extensions/third-party/ggang-copy/profiles.js';
-			script.onload = () => {
-				debugLog('깡갤 복사기: profiles.js 로드 완료');
-				resolve();
-			};
-			script.onerror = (error) => {
-				console.error('깡갤 복사기: profiles.js 로드 실패', error);
-				reject(error);
-			};
-			document.head.appendChild(script);
-		});
-	}
-
-	// ghostwrite.js 모듈 로드 함수
-	async function loadGhostwriteModule() {
-		return new Promise((resolve, reject) => {
-			const script = document.createElement('script');
-			script.src = '/scripts/extensions/third-party/ggang-copy/ghostwrite.js';
-			script.onload = () => {
-				debugLog('깡갤 복사기: ghostwrite.js 로드 완료');
-				resolve();
-			};
-			script.onerror = (error) => {
-				console.error('깡갤 복사기: ghostwrite.js 로드 실패', error);
-				reject(error);
-			};
-			document.head.appendChild(script);
-		});
-	}
-
-	// messageOperations.js 모듈 로드 함수
-	async function loadMessageOperationsModule() {
-		return new Promise((resolve, reject) => {
-			const script = document.createElement('script');
-			script.src = '/scripts/extensions/third-party/ggang-copy/messageOperations.js';
-			script.onload = () => {
-				debugLog('깡갤 복사기: messageOperations.js 로드 완료');
-				resolve();
-			};
-			script.onerror = (error) => {
-				console.error('깡갤 복사기: messageOperations.js 로드 실패', error);
-				reject(error);
-			};
-			document.head.appendChild(script);
-		});
-	}
-
-	// ui.js 모듈 로드 함수
-	async function loadUIModule() {
-		return new Promise((resolve, reject) => {
-			const script = document.createElement('script');
-			script.src = '/scripts/extensions/third-party/ggang-copy/ui.js';
-			script.onload = () => {
-				debugLog('깡갤 복사기: ui.js 로드 완료');
-				resolve();
-			};
-			script.onerror = (error) => {
-				console.error('깡갤 복사기: ui.js 로드 실패', error);
-				reject(error);
-			};
-			document.head.appendChild(script);
-		});
-	}
+    // 모듈별 로드 함수 (간결화)
+    async function loadUtilsModule() { return createModuleLoader('utils.js'); }
+    async function loadSettingsModule() { return createModuleLoader('settings.js'); }
+    async function loadPresetsModule() { return createModuleLoader('presets.js'); }
+    async function loadCommandsModule() { return createModuleLoader('commands.js'); }
+    async function loadIconsModule() { return createModuleLoader('icons.js'); }
+	async function loadProfilesModule() { return createModuleLoader('profiles.js'); }
+	async function loadGhostwriteModule() { return createModuleLoader('ghostwrite.js'); }
+	async function loadMessageOperationsModule() { return createModuleLoader('messageOperations.js'); }
+	async function loadUIModule() { return createModuleLoader('ui.js'); }
+	async function loadWandMenuModule() { return createModuleLoader('wandMenu.js'); }
 
 	// 대필 진행 상태 변수들은 ghostwrite 모듈로 이동됨
 
@@ -324,6 +237,11 @@
     function debugLog(...args) {
         if (window.CopyBotUtils) {
             window.CopyBotUtils.debugLog(isDebugMode, ...args);
+        } else {
+            // utils.js 로드 전에는 직접 출력 (초기화 로그 확인용)
+            if (isDebugMode || args[0]?.includes('🔥')) {
+                console.log(`[${EXTENSION_NAME} (초기화 중)]`, ...args);
+            }
         }
     }
 
@@ -867,6 +785,7 @@
 			await loadGhostwriteModule();
 			await loadMessageOperationsModule();
 			await loadUIModule();
+			await loadWandMenuModule();
 
 			// 프리셋 모듈 초기화
             if (window.CopyBotPresets) {
@@ -889,13 +808,14 @@
 					utils: window.CopyBotUtils,
 					isDebugMode: isDebugMode,
 					// 콜백 함수들 전달
-					callbacks: {
-						executeGhostwrite: executeGhostwrite,
-						removeTagsFromElement: () => window.CopyBotCommands?.removeTagsFromElement('#send_textarea'),
-						executeSimpleCommand: (cmd, msg, callback) => window.CopyBotCommands?.executeSimpleCommand(cmd, msg, callback),
-						triggerCacheBustRegeneration: () => window.CopyBotCommands?.triggerCacheBustRegeneration(),
-						smartDeleteAndRegenerate: () => window.CopyBotCommands?.smartDeleteAndRegenerate()
-					}
+						callbacks: {
+							executeGhostwrite: executeGhostwrite,
+							removeTagsFromElement: () => window.CopyBotCommands?.removeTagsFromElement('#send_textarea'),
+							executeSimpleCommand: (cmd, msg, callback) => window.CopyBotCommands?.executeSimpleCommand(cmd, msg, callback),
+							triggerCacheBustRegeneration: () => window.CopyBotCommands?.triggerCacheBustRegeneration(),
+							smartDeleteAndRegenerate: () => window.CopyBotCommands?.smartDeleteAndRegenerate(),
+							toggleQuickMenu: () => window.CopyBotWandMenu?.toggleQuickMenu()
+						}
 				});
 			}
 
@@ -970,6 +890,7 @@
 						
 						// icons 모듈 함수들
 						safeUpdateInputFieldIcons: safeUpdateInputFieldIcons,
+						updateInputFieldIcons: () => window.CopyBotIcons?.updateInputFieldIcons(),
 						
 						// profiles 모듈 함수들
 						enableHighQualityProfiles: enableHighQualityProfiles,
@@ -1009,6 +930,56 @@
 					}
 				});
 			}
+
+			// wandMenu 모듈 초기화
+			if (window.CopyBotWandMenu) {
+				window.CopyBotWandMenu.init({
+					isDebugMode: isDebugMode,
+					callbacks: {
+						// 명령어 실행
+						executeSimpleCommand: (cmd, msg, callback) => 
+							window.CopyBotCommands?.executeSimpleCommand(cmd, msg, callback),
+						
+						// 태그 제거
+						removeTagsFromElement: (selector) => 
+							window.CopyBotCommands?.removeTagsFromElement(selector),
+						
+						// 재생성
+						triggerCacheBustRegeneration: () => 
+							window.CopyBotCommands?.triggerCacheBustRegeneration(),
+						
+						// 삭제 후 재생성
+						smartDeleteAndRegenerate: () => 
+							window.CopyBotCommands?.smartDeleteAndRegenerate(),
+						
+						// 복사 (기존 함수 - 텍스트박스 포함)
+						executeCopyCommand: (start, end) => 
+							window.CopyBotCommands?.executeCopyCommand(start, end),
+						
+						// 숨기기/보이기
+						executeHideCommand: (start, end) => 
+							window.CopyBotMessageOperations?.executeHideCommand(start, end),
+						executeUnhideCommand: (start, end) => 
+							window.CopyBotMessageOperations?.executeUnhideCommand(start, end),
+						
+						// 메시지 범위 정보
+						getMessageRange: () => 
+							window.CopyBotMessageOperations?.getMessageRange(),
+						
+						// 좆됨방지 설정 확인
+						isConfirmDeleteEnabled: () => 
+							$('#copybot_confirm_delete_toggle').attr('data-enabled') === 'true',
+						
+						// 퀵메뉴 설정 확인
+						getQuickMenuSettings: () => ({
+							enabled: $('#copybot_quickmenu_toggle').attr('data-enabled') === 'true',
+							accessWand: $('#copybot_quickmenu_wand').is(':checked'),
+							accessInputIcon: $('#copybot_quickmenu_input_icon').is(':checked'),
+							inputIconPosition: $('#copybot_quickmenu_icon_position').val() || 'bottom_left'
+						})
+					}
+				});
+			}
         } catch (error) {
             console.error('깡갤 복사기: 모듈 로드 실패, 기본 함수 사용');
         }
@@ -1020,10 +991,14 @@
             if ($("#extensions_settings2").length > 0) {
             // settings.html 내용을 수동으로 DOM에 삽입
             try {
-                const response = await fetch('/scripts/extensions/third-party/ggang-copy/settings.html');
+                const response = await fetch(`${BASE_PATH}/settings.html`);
                 const htmlContent = await response.text();
                 $("#extensions_settings2").append(htmlContent);
-                debugLog('깡갤 복사기: 설정 UI 수동 로드 완료');
+                
+                // UI 타이틀 업데이트 (테스트 버전일 경우 자동으로 (테스트) 추가)
+                $("#copybot_settings .inline-drawer-header b").text(EXTENSION_NAME);
+                
+                debugLog(`${EXTENSION_NAME}: 설정 UI 수동 로드 완료`);
             } catch (error) {
                 console.error('깡갤 복사기: settings.html 로드 실패', error);
                 return;

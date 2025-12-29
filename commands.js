@@ -268,7 +268,7 @@
             }
         },
 
-        // 스마트 삭제 후 재생성 함수 (채팅 유무에 따라 분기)
+        // 스마트 삭제 후 재생성 함수 (채팅 유무에 따라 분기, Polling 방식으로 삭제 완료 대기)
         smartDeleteAndRegenerate: function() {
             try {
                 const context = window.SillyTavern.getContext();
@@ -279,10 +279,33 @@
                     debugLog('깡갤 복사기: 채팅 없음 - 삭제 생략, 재생성만 실행');
                     this.triggerCacheBustRegeneration();
                 } else {
-                    // 채팅 있음: 삭제 후 재생성
-                    debugLog('깡갤 복사기: 채팅 있음 - 삭제 후 재생성 실행');
+                    // 채팅 있음: 삭제 후 재생성 (Polling 방식으로 삭제 완료 대기)
+                    const originalLength = chat.length;
+                    debugLog('깡갤 복사기: 채팅 있음 - 삭제 후 재생성 실행 (Polling 방식), 원본 메시지 수:', originalLength);
+                    
                     this.executeSimpleCommand('/del 1', '', () => {
-                        this.triggerCacheBustRegeneration();
+                        let pollCount = 0;
+                        const maxPollCount = 25; // 5초 타임아웃 (200ms * 25 = 5000ms)
+                        
+                        const checkDeletion = setInterval(() => {
+                            pollCount++;
+                            const currentContext = window.SillyTavern.getContext();
+                            const currentLength = currentContext.chat.length;
+                            
+                            debugLog(`깡갤 복사기: 삭제 확인 중... (${pollCount}/${maxPollCount}), 현재 메시지 수: ${currentLength}, 원본: ${originalLength}`);
+                            
+                            if (currentLength < originalLength) {
+                                // 삭제 완료 감지!
+                                clearInterval(checkDeletion);
+                                debugLog('깡갤 복사기: 삭제 완료 감지됨! 재생성 실행');
+                                this.triggerCacheBustRegeneration();
+                            } else if (pollCount >= maxPollCount) {
+                                // 타임아웃: 5초 경과해도 삭제가 안 됐지만 재생성 실행
+                                clearInterval(checkDeletion);
+                                debugLog('깡갤 복사기: 삭제 대기 타임아웃 (5초 경과) - 강제 재생성 실행');
+                                this.triggerCacheBustRegeneration();
+                            }
+                        }, 200); // 200ms마다 체크
                     });
                 }
             } catch (error) {

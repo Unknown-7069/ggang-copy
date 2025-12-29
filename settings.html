@@ -79,23 +79,25 @@
                             <button id="copybot_open_message_operations_button" class="copybot_settings_button" title="메세지 정리 옵션">
                                 메세지 정리
                             </button>
-                            <button id="copybot_open_misc_button" class="copybot_settings_button" title="기타 옵션">
-                                기타
-                            </button>
+                            <button id="copybot_open_quickmenu_button" class="copybot_settings_button" title="퀵메뉴 옵션">
+								퀵메뉴
+							</button>
+							<button id="copybot_open_misc_button" class="copybot_settings_button" title="기타 옵션">
+								기타
+							</button>
                         </div>
                     </div>
 
-                    <!-- 동적 액션 버튼이 표시될 컨테이너 -->
-                    <div id="copybot_action_buttons" class="copybot_action_buttons_row"></div>
                     
                     <!-- 대필 설정창 -->
                     <div id="copybot_ghostwrite_panel" class="copybot_settings_panel" style="display: none;">
                         <div class="copybot_settings_item">
                             <div class="copybot_settings_main">
                                 <span class="copybot_settings_label">대필 기능 사용</span>
-                                <button id="copybot_ghostwrite_toggle" class="copybot_toggle_button" data-enabled="false">
-                                    OFF
-                                </button>
+									<div class="fa-solid fa-user-edit copybot_icon_picker copybot_inline_icon_picker" id="copybot_ghostwrite_icon_picker" data-default="fa-user-edit" data-icon="fa-user-edit" title="클릭하여 아이콘 변경" style="display: none;"></div>
+									<button id="copybot_ghostwrite_toggle" class="copybot_toggle_button" data-enabled="false">
+										OFF
+									</button>
                             </div>
                         </div>
                         
@@ -253,6 +255,14 @@
                                 /hide와 /unhide 명령어를 사용해 메시지를 숨기거나 다시 보이게 합니다.<br>
                                 숨긴 메시지는 AI가 인식하지 못하지만 채팅 기록에는 남아있습니다.
                             </div>
+                            
+                            <!-- 숨겨진 메시지 구간 확인 -->
+                            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(128, 128, 128, 0.2);">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <button id="copybot_check_hidden" class="menu_button" style="flex-shrink: 0;">숨김 구간 확인</button>
+                                    <span id="copybot_hidden_result" style="font-size: 12px; color: #888; word-break: break-all;"></span>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- 다중 메시지 삭제 섹션 -->
@@ -289,24 +299,17 @@
                                 </button>
                             </div>
                             <div id="copybot_tag_remove_options" class="copybot_settings_sub" style="display: none;">
-                                <div class="copybot_settings_sub_row">
+                                <div class="copybot_settings_sub_row copybot_icon_row">
                                     <div class="copybot_settings_sub_item">
-                                        <input type="checkbox" id="copybot_tag_remove_button" class="copybot_checkbox">
-                                        <label for="copybot_tag_remove_button" class="copybot_settings_sub_label">복사기</label>
-                                    </div>
-                                    <div class="copybot_settings_sub_item">
-                                        <input type="checkbox" id="copybot_tag_remove_icon" class="copybot_checkbox">
-                                        <label for="copybot_tag_remove_icon" class="copybot_settings_sub_label">입력 필드</label>
-                                    </div>
-                                    <div class="copybot_settings_sub_item" style="flex-basis: 100%; margin-top: 8px;">
-                                        <label class="copybot_settings_sub_label" style="margin-right: 8px;">입력필드 위치:</label>
-                                        <select id="copybot_tag_remove_position" class="text_pole" style="width: auto; min-width: 120px;">
+                                        <label class="copybot_settings_sub_label" style="margin-right: 8px;">아이콘 위치:</label>
+                                        <select id="copybot_tag_remove_position" class="text_pole" style="width: auto;">
                                             <option value="left">좌측</option>
                                             <option value="right">우측</option>
                                             <option value="bottom_left" selected>좌하단(기본)</option>
                                             <option value="bottom_right">우상단</option>
                                         </select>
                                     </div>
+                                    <div class="fa-solid fa-tags copybot_icon_picker" id="copybot_tag_remove_icon_picker" data-default="fa-tags" title="클릭하여 아이콘 변경"></div>
                                 </div>
                             </div>
                         </div>
@@ -319,24 +322,17 @@
                                 </button>
                             </div>
                             <div id="copybot_delete_options" class="copybot_settings_sub" style="display: none;">
-                                <div class="copybot_settings_sub_row">
+                                <div class="copybot_settings_sub_row copybot_icon_row">
                                     <div class="copybot_settings_sub_item">
-                                        <input type="checkbox" id="copybot_delete_button" class="copybot_checkbox">
-                                        <label for="copybot_delete_button" class="copybot_settings_sub_label">복사기</label>
-                                    </div>
-                                    <div class="copybot_settings_sub_item">
-                                        <input type="checkbox" id="copybot_delete_icon" class="copybot_checkbox">
-                                        <label for="copybot_delete_icon" class="copybot_settings_sub_label">입력 필드</label>
-                                    </div>
-                                    <div class="copybot_settings_sub_item" style="flex-basis: 100%; margin-top: 8px;">
-                                        <label class="copybot_settings_sub_label" style="margin-right: 8px;">입력필드 위치:</label>
-                                        <select id="copybot_delete_position" class="text_pole" style="width: auto; min-width: 120px;">
+                                        <label class="copybot_settings_sub_label" style="margin-right: 8px;">아이콘 위치:</label>
+                                        <select id="copybot_delete_position" class="text_pole" style="width: auto;">
                                             <option value="left">좌측</option>
                                             <option value="right">우측</option>
                                             <option value="bottom_left" selected>좌하단(기본)</option>
                                             <option value="bottom_right">우상단</option>
                                         </select>
                                     </div>
+                                    <div class="fa-solid fa-trash copybot_icon_picker" id="copybot_delete_icon_picker" data-default="fa-trash" title="클릭하여 아이콘 변경"></div>
                                 </div>
                             </div>
                         </div>
@@ -349,24 +345,17 @@
                                 </button>
                             </div>
                             <div id="copybot_delete_regenerate_options" class="copybot_settings_sub" style="display: none;">
-                                <div class="copybot_settings_sub_row">
+                                <div class="copybot_settings_sub_row copybot_icon_row">
                                     <div class="copybot_settings_sub_item">
-                                        <input type="checkbox" id="copybot_delete_regenerate_button" class="copybot_checkbox">
-                                        <label for="copybot_delete_regenerate_button" class="copybot_settings_sub_label">복사기</label>
-                                    </div>
-                                    <div class="copybot_settings_sub_item">
-                                        <input type="checkbox" id="copybot_delete_regenerate_icon" class="copybot_checkbox">
-                                        <label for="copybot_delete_regenerate_icon" class="copybot_settings_sub_label">입력 필드</label>
-                                    </div>
-                                    <div class="copybot_settings_sub_item" style="flex-basis: 100%; margin-top: 8px;">
-                                        <label class="copybot_settings_sub_label" style="margin-right: 8px;">입력필드 위치:</label>
-                                        <select id="copybot_delete_regenerate_position" class="text_pole" style="width: auto; min-width: 120px;">
+                                        <label class="copybot_settings_sub_label" style="margin-right: 8px;">아이콘 위치:</label>
+                                        <select id="copybot_delete_regenerate_position" class="text_pole" style="width: auto;">
                                             <option value="left">좌측</option>
                                             <option value="right">우측</option>
                                             <option value="bottom_left" selected>좌하단(기본)</option>
                                             <option value="bottom_right">우상단</option>
                                         </select>
                                     </div>
+                                    <div class="fa-solid fa-redo copybot_icon_picker" id="copybot_delete_regenerate_icon_picker" data-default="fa-redo" title="클릭하여 아이콘 변경"></div>
                                 </div>
                             </div>
                         </div>
@@ -387,7 +376,94 @@
                         <!-- 설명 섹션 -->
                         <div class="copybot_section copybot_description_section">
                             <div class="copybot_description">
-                                각 기능을 활성화한 후, <strong>복사기</strong> 체크박스를 선택하면 확장프로그램 내부에 버튼이 생성되고, <strong>입력 필드</strong> 체크박스를 선택하면 채팅 입력창 옆에 아이콘이 추가됩니다. 설정은 창을 닫을 때 자동 저장됩니다.
+                                각 기능을 활성화하면 채팅 입력창 옆에 해당 기능의 아이콘이 추가됩니다. 설정은 창을 닫을 때 자동 저장됩니다.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    </div>
+                    
+                    <!-- 퀵메뉴 설정창 -->
+                    <div id="copybot_quickmenu_panel" class="copybot_settings_panel" style="display: none;">
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">퀵메뉴 사용</span>
+                                <button id="copybot_quickmenu_toggle" class="copybot_toggle_button" data-enabled="false">
+                                    OFF
+                                </button>
+                            </div>
+                            <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666;">
+                                퀵메뉴를 활성화하면 채팅 화면에서 빠르게 복사기 기능에 접근할 수 있습니다.
+                            </div>
+                        </div>
+                        
+                        <!-- 접근 방식 옵션 (퀵메뉴 ON일 때만 표시) -->
+                        <div id="copybot_quickmenu_access_options" style="display: none;">
+                            <div class="copybot_settings_item">
+                                <div class="copybot_settings_main">
+                                    <span class="copybot_settings_label">접근 방식</span>
+                                </div>
+                                <div class="copybot_settings_sub" style="display: block; margin-top: 10px;">
+                                    <div class="copybot_settings_sub_row">
+                                        <div class="copybot_settings_sub_item">
+                                            <input type="checkbox" id="copybot_quickmenu_wand" class="copybot_checkbox">
+											<label for="copybot_quickmenu_wand" class="copybot_settings_sub_label">마법봉 (Extensions 메뉴)</label>
+											<div class="fa-solid fa-clipboard copybot_icon_picker copybot_inline_icon_picker" id="copybot_quickmenu_wand_icon_picker" data-default="fa-clipboard" data-icon="fa-clipboard" title="클릭하여 아이콘 변경" style="display: none;"></div>
+                                        </div>
+                                    </div>
+                                    <div class="copybot_settings_sub_row" style="margin-top: 8px;">
+                                        <div class="copybot_settings_sub_item">
+                                            <input type="checkbox" id="copybot_quickmenu_input_icon" class="copybot_checkbox">
+											<label for="copybot_quickmenu_input_icon" class="copybot_settings_sub_label">입력필드 아이콘</label>
+											<div class="fa-solid fa-clipboard copybot_icon_picker copybot_inline_icon_picker" id="copybot_quickmenu_input_icon_picker" data-default="fa-clipboard" data-icon="fa-clipboard" title="클릭하여 아이콘 변경" style="display: none;"></div>
+                                        </div>
+                                        <div class="copybot_settings_sub_item" id="copybot_quickmenu_position_container" style="flex-basis: 100%; margin-top: 8px; display: none;">
+                                            <label class="copybot_settings_sub_label" style="margin-right: 8px;">입력필드 위치:</label>
+                                            <select id="copybot_quickmenu_icon_position" class="text_pole" style="width: auto; min-width: 120px;">
+                                                <option value="left">좌측</option>
+                                                <option value="right">우측</option>
+                                                <option value="bottom_left" selected>좌하단(기본)</option>
+                                                <option value="bottom_right">우상단</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="copybot_description" style="margin-top: 12px; font-size:12px; color: #666;">
+                                    마법봉: 화면 우측 하단의 Extensions 메뉴(🪄)에서 접근<br>
+                                    입력필드 아이콘: 채팅 입력창 옆에 아이콘 추가
+                                </div>
+                            </div>
+                            
+                            <!-- 표시할 섹션 설정 -->
+                            <div class="copybot_settings_item">
+                                <div class="copybot_settings_main">
+                                    <span class="copybot_settings_label">표시할 섹션</span>
+                                </div>
+                                <div class="copybot_quickmenu_sections_grid">
+                                    <label class="copybot_section_checkbox">
+                                        <input type="checkbox" id="copybot_qm_section_jump" checked>
+                                        <span>이동</span>
+                                    </label>
+                                    <label class="copybot_section_checkbox">
+                                        <input type="checkbox" id="copybot_qm_section_write" checked>
+                                        <span>작성</span>
+                                    </label>
+                                    <label class="copybot_section_checkbox">
+                                        <input type="checkbox" id="copybot_qm_section_copy" checked>
+                                        <span>복사</span>
+                                    </label>
+                                    <label class="copybot_section_checkbox">
+                                        <input type="checkbox" id="copybot_qm_section_hide" checked>
+                                        <span>숨기기/보이기</span>
+                                    </label>
+                                    <label class="copybot_section_checkbox">
+                                        <input type="checkbox" id="copybot_qm_section_multi_delete" checked>
+                                        <span>다중 삭제</span>
+                                    </label>
+                                </div>
+                                <div class="copybot_description" style="margin-top: 8px; font-size:12px; color: #666;">
+                                    체크 해제한 섹션은 퀵메뉴에서 숨겨집니다.
+                                </div>
                             </div>
                         </div>
                     </div>
