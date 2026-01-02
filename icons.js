@@ -158,6 +158,7 @@
             return $picker.length > 0 ? ($picker.data('icon') || defaultIcon) : defaultIcon;
         };
 
+        // 좆됨방지는 commands.js의 executeSimpleCommand에서 처리됨
         const allIconItems = [
             { type: 'ghostwrite', toggleId: 'copybot_ghostwrite_toggle', iconClass: getIconClass('copybot_ghostwrite_icon_picker', 'fa-user-edit'), title: '캐릭터에게 대필 요청', action: executeGhostwrite, group: 20 },
             { type: 'action', toggleId: 'copybot_tag_remove_toggle', iconClass: getIconClass('copybot_tag_remove_icon_picker', 'fa-tags'), title: '작성중인 메시지의 태그 제거', action: () => removeTagsFromElement('#send_textarea'), group: 20 },
@@ -167,8 +168,21 @@
 
 		allIconItems.forEach(item => {
             const isToggleOn = $(`#${item.toggleId}`).attr('data-enabled') === 'true';
-            // 편의기능 3종은 toggle ON이면 자동으로 아이콘 표시 (체크박스 삭제됨)
-            if (isToggleOn) {
+            
+            // 편의기능 3종은 toggle ON + inputfield 체크박스 ON일 때만 아이콘 표시
+            let shouldShowIcon = false;
+            
+            if (item.type === 'ghostwrite') {
+                // 대필은 toggle ON이면 표시
+                shouldShowIcon = isToggleOn;
+            } else {
+                // 편의기능 3종은 toggle ON + inputfield 체크박스 ON일 때만 표시
+                const inputfieldCheckboxId = `#${item.toggleId.replace('_toggle', '_inputfield')}`;
+                const isInputfieldChecked = $(inputfieldCheckboxId).is(':checked');
+                shouldShowIcon = isToggleOn && isInputfieldChecked;
+            }
+            
+            if (shouldShowIcon) {
                 // 각 기능별 개별 위치 설정 읽기
                 let targetPosition = 'right'; // 기본값
                 

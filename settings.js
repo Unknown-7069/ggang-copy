@@ -29,17 +29,23 @@
                     tagRemove: {
                         enabled: $('#copybot_tag_remove_toggle').attr('data-enabled') === 'true',
                         position: $('#copybot_tag_remove_position').val() || 'bottom_left',
-                        iconClass: $('#copybot_tag_remove_icon_picker').data('icon') || 'fa-tags'
+                        iconClass: $('#copybot_tag_remove_icon_picker').data('icon') || 'fa-tags',
+                        submenu: $('#copybot_tag_remove_submenu').is(':checked'),
+                        inputfield: $('#copybot_tag_remove_inputfield').is(':checked')
                     },
                     delete: {
                         enabled: $('#copybot_delete_toggle').attr('data-enabled') === 'true',
                         position: $('#copybot_delete_position').val() || 'bottom_left',
-                        iconClass: $('#copybot_delete_icon_picker').data('icon') || 'fa-trash'
+                        iconClass: $('#copybot_delete_icon_picker').data('icon') || 'fa-trash',
+                        submenu: $('#copybot_delete_submenu').is(':checked'),
+                        inputfield: $('#copybot_delete_inputfield').is(':checked')
                     },
                     deleteRegenerate: {
                         enabled: $('#copybot_delete_regenerate_toggle').attr('data-enabled') === 'true',
                         position: $('#copybot_delete_regenerate_position').val() || 'bottom_left',
-                        iconClass: $('#copybot_delete_regenerate_icon_picker').data('icon') || 'fa-redo'
+                        iconClass: $('#copybot_delete_regenerate_icon_picker').data('icon') || 'fa-redo',
+                        submenu: $('#copybot_delete_regenerate_submenu').is(':checked'),
+                        inputfield: $('#copybot_delete_regenerate_inputfield').is(':checked')
                     },
                     quickMenu: {
 						enabled: $('#copybot_quickmenu_toggle').attr('data-enabled') === 'true',
@@ -216,15 +222,20 @@
                 $('#copybot_delete_toggle').attr('data-enabled', settings.delete.enabled).text(settings.delete.enabled ? 'ON' : 'OFF');
                 $('#copybot_delete_regenerate_toggle').attr('data-enabled', settings.deleteRegenerate.enabled).text(settings.deleteRegenerate.enabled ? 'ON' : 'OFF');
 
-				if (settings.tagRemove.position) {
+                if (settings.tagRemove.position) {
                     $('#copybot_tag_remove_position').val(settings.tagRemove.position);
                 }
                 // 태그제거 아이콘 로드
                 const tagRemoveIcon = settings.tagRemove.iconClass || 'fa-tags';
                 $('#copybot_tag_remove_icon_picker')
                     .removeClass()
-                    .addClass(`fa-solid ${tagRemoveIcon} copybot_icon_picker`)
+                    .addClass(`fa-solid ${tagRemoveIcon} copybot_icon_picker copybot_inline_icon_picker`)
                     .data('icon', tagRemoveIcon);
+                // 태그제거 체크박스 로드 (마이그레이션: 기존 enabled=true 유저는 inputfield=true)
+                const tagRemoveSubmenu = settings.tagRemove.submenu || false;
+                const tagRemoveInputfield = settings.tagRemove.inputfield !== undefined ? settings.tagRemove.inputfield : settings.tagRemove.enabled;
+                $('#copybot_tag_remove_submenu').prop('checked', tagRemoveSubmenu);
+                $('#copybot_tag_remove_inputfield').prop('checked', tagRemoveInputfield);
                 
                 if (settings.delete.position) {
                     $('#copybot_delete_position').val(settings.delete.position);
@@ -233,8 +244,13 @@
                 const deleteIcon = settings.delete.iconClass || 'fa-trash';
                 $('#copybot_delete_icon_picker')
                     .removeClass()
-                    .addClass(`fa-solid ${deleteIcon} copybot_icon_picker`)
+                    .addClass(`fa-solid ${deleteIcon} copybot_icon_picker copybot_inline_icon_picker`)
                     .data('icon', deleteIcon);
+                // 삭제 체크박스 로드 (마이그레이션: 기존 enabled=true 유저는 inputfield=true)
+                const deleteSubmenu = settings.delete.submenu || false;
+                const deleteInputfield = settings.delete.inputfield !== undefined ? settings.delete.inputfield : settings.delete.enabled;
+                $('#copybot_delete_submenu').prop('checked', deleteSubmenu);
+                $('#copybot_delete_inputfield').prop('checked', deleteInputfield);
                 
                 if (settings.deleteRegenerate.position) {
                     $('#copybot_delete_regenerate_position').val(settings.deleteRegenerate.position);
@@ -243,8 +259,13 @@
                 const regenIcon = settings.deleteRegenerate.iconClass || 'fa-redo';
                 $('#copybot_delete_regenerate_icon_picker')
                     .removeClass()
-                    .addClass(`fa-solid ${regenIcon} copybot_icon_picker`)
+                    .addClass(`fa-solid ${regenIcon} copybot_icon_picker copybot_inline_icon_picker`)
                     .data('icon', regenIcon);
+                // 재생성 체크박스 로드 (마이그레이션: 기존 enabled=true 유저는 inputfield=true)
+                const regenSubmenu = settings.deleteRegenerate.submenu || false;
+                const regenInputfield = settings.deleteRegenerate.inputfield !== undefined ? settings.deleteRegenerate.inputfield : settings.deleteRegenerate.enabled;
+                $('#copybot_delete_regenerate_submenu').prop('checked', regenSubmenu);
+                $('#copybot_delete_regenerate_inputfield').prop('checked', regenInputfield);
 
                 if (settings.tagRemove.enabled) $('#copybot_tag_remove_options').show(); else $('#copybot_tag_remove_options').hide();
                 if (settings.delete.enabled) $('#copybot_delete_options').show(); else $('#copybot_delete_options').hide();

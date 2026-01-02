@@ -391,6 +391,13 @@
             console.error('깡갤 복사기: CopyBotCommands 모듈이 로드되지 않음');
     }
 
+	// 스마트 삭제 후 재생성 함수 (commands 모듈 사용)
+    function smartDeleteAndRegenerate() {
+        return window.CopyBotCommands ? 
+            window.CopyBotCommands.smartDeleteAndRegenerate() :
+            console.error('깡갤 복사기: CopyBotCommands 모듈이 로드되지 않음');
+    }
+
     // 프리셋 모듈을 통한 데이터 마이그레이션 (함수 제거, 모듈 호출로 변경)
     function performDataMigration() {
         if (window.CopyBotPresets) {
@@ -887,6 +894,7 @@
 						removeTagsFromElement: removeTagsFromElement,
 						copyTextboxContent: copyTextboxContent,
 						triggerCacheBustRegeneration: triggerCacheBustRegeneration,
+						smartDeleteAndRegenerate: smartDeleteAndRegenerate,
 						
 						// icons 모듈 함수들
 						safeUpdateInputFieldIcons: safeUpdateInputFieldIcons,

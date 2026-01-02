@@ -114,8 +114,63 @@
                 } else {
                     $('#copybot_confirm_delete_item').slideUp(200);
                 }
+                
+                // 소메뉴 아이콘 초기화 (설정 로드 후 복사기 체크 상태에 따라)
+                this.updateSubmenuIcons();
             } catch (error) {
                 console.error('CopyBotUI: updateActionButtons 실패', error);
+            }
+        },
+
+        // 소메뉴 아이콘 업데이트 함수
+        updateSubmenuIcons: function() {
+            try {
+                // 태그제거 소메뉴 아이콘
+                const tagRemoveEnabled = $('#copybot_tag_remove_toggle').attr('data-enabled') === 'true';
+                const tagRemoveSubmenu = $('#copybot_tag_remove_submenu').is(':checked');
+                if (tagRemoveEnabled && tagRemoveSubmenu) {
+                    const iconClass = $('#copybot_tag_remove_icon_picker').data('icon') || 'fa-tags';
+                    $('#copybot_submenu_tag_remove')
+                        .removeClass()
+                        .addClass(`copybot_submenu_icon fa-solid ${iconClass}`)
+                        .show();
+                } else {
+                    $('#copybot_submenu_tag_remove').hide();
+                }
+                
+                // 삭제 소메뉴 아이콘
+                const deleteEnabled = $('#copybot_delete_toggle').attr('data-enabled') === 'true';
+                const deleteSubmenu = $('#copybot_delete_submenu').is(':checked');
+                if (deleteEnabled && deleteSubmenu) {
+                    const iconClass = $('#copybot_delete_icon_picker').data('icon') || 'fa-trash';
+                    $('#copybot_submenu_delete')
+                        .removeClass()
+                        .addClass(`copybot_submenu_icon fa-solid ${iconClass}`)
+                        .show();
+                } else {
+                    $('#copybot_submenu_delete').hide();
+                }
+                
+                // 재생성 소메뉴 아이콘
+                const regenEnabled = $('#copybot_delete_regenerate_toggle').attr('data-enabled') === 'true';
+                const regenSubmenu = $('#copybot_delete_regenerate_submenu').is(':checked');
+                if (regenEnabled && regenSubmenu) {
+                    const iconClass = $('#copybot_delete_regenerate_icon_picker').data('icon') || 'fa-redo';
+                    $('#copybot_submenu_regenerate')
+                        .removeClass()
+                        .addClass(`copybot_submenu_icon fa-solid ${iconClass}`)
+                        .show();
+                } else {
+                    $('#copybot_submenu_regenerate').hide();
+                }
+                
+                // 입력필드 체크 상태에 따라 드롭다운 비활성화
+                $('#copybot_tag_remove_position').prop('disabled', !$('#copybot_tag_remove_inputfield').is(':checked'));
+                $('#copybot_delete_position').prop('disabled', !$('#copybot_delete_inputfield').is(':checked'));
+                $('#copybot_delete_regenerate_position').prop('disabled', !$('#copybot_delete_regenerate_inputfield').is(':checked'));
+                
+            } catch (error) {
+                console.error('CopyBotUI: updateSubmenuIcons 실패', error);
             }
         },
 
@@ -611,7 +666,7 @@
                     const actions = {
                         'copybot_action_remove_tags': () => { if (callbacks.removeTagsFromElement) callbacks.removeTagsFromElement('#send_textarea'); },
                         'copybot_action_delete_last': () => { if (callbacks.executeSimpleCommand) callbacks.executeSimpleCommand('/del 1', '마지막 메시지 1개를 삭제했습니다.'); },
-                        'copybot_action_delete_regen': () => { if (callbacks.executeSimpleCommand) callbacks.executeSimpleCommand('/del 1', '마지막 메시지를 삭제하고 재생성합니다.', callbacks.triggerCacheBustRegeneration); }
+                        'copybot_action_delete_regen': () => { if (callbacks.smartDeleteAndRegenerate) callbacks.smartDeleteAndRegenerate(); }
                     };
                     const action = actions[$(this).attr('id')];
                     if (action) action();
@@ -660,6 +715,103 @@
 				.on('change', '#copybot_tag_remove_position, #copybot_delete_position, #copybot_delete_regenerate_position', () => {
 				if (callbacks.safeUpdateInputFieldIcons) callbacks.safeUpdateInputFieldIcons();
 				if (callbacks.saveSettings) callbacks.saveSettings();
+			});
+
+			// ===== 편의기능 복사기/입력필드 체크박스 이벤트 =====
+			
+			// 복사기 체크박스 변경 - 소메뉴 아이콘 표시/숨김
+			$(document).off('change', '#copybot_tag_remove_submenu, #copybot_delete_submenu, #copybot_delete_regenerate_submenu')
+				.on('change', '#copybot_tag_remove_submenu, #copybot_delete_submenu, #copybot_delete_regenerate_submenu', function() {
+				const checkboxId = $(this).attr('id');
+				const isChecked = $(this).is(':checked');
+				
+				// 체크박스 ID에 따라 해당 소메뉴 아이콘 표시/숨김
+				if (checkboxId === 'copybot_tag_remove_submenu') {
+					if (isChecked) {
+						const iconClass = $('#copybot_tag_remove_icon_picker').data('icon') || 'fa-tags';
+						$('#copybot_submenu_tag_remove')
+							.removeClass()
+							.addClass(`copybot_submenu_icon fa-solid ${iconClass}`)
+							.show();
+					} else {
+						$('#copybot_submenu_tag_remove').hide();
+					}
+				} else if (checkboxId === 'copybot_delete_submenu') {
+					if (isChecked) {
+						const iconClass = $('#copybot_delete_icon_picker').data('icon') || 'fa-trash';
+						$('#copybot_submenu_delete')
+							.removeClass()
+							.addClass(`copybot_submenu_icon fa-solid ${iconClass}`)
+							.show();
+					} else {
+						$('#copybot_submenu_delete').hide();
+					}
+				} else if (checkboxId === 'copybot_delete_regenerate_submenu') {
+					if (isChecked) {
+						const iconClass = $('#copybot_delete_regenerate_icon_picker').data('icon') || 'fa-redo';
+						$('#copybot_submenu_regenerate')
+							.removeClass()
+							.addClass(`copybot_submenu_icon fa-solid ${iconClass}`)
+							.show();
+					} else {
+						$('#copybot_submenu_regenerate').hide();
+					}
+				}
+				
+				if (callbacks.saveSettings) callbacks.saveSettings();
+				if (callbacks.debugLog && isDebugMode) callbacks.debugLog(true, '복사기 체크박스 변경:', checkboxId, '→', isChecked ? 'ON' : 'OFF');
+			});
+
+			// 입력필드 체크박스 변경 - 위치 드롭다운 활성화/비활성화 + 아이콘 업데이트
+			$(document).off('change', '#copybot_tag_remove_inputfield, #copybot_delete_inputfield, #copybot_delete_regenerate_inputfield')
+				.on('change', '#copybot_tag_remove_inputfield, #copybot_delete_inputfield, #copybot_delete_regenerate_inputfield', function() {
+				const checkboxId = $(this).attr('id');
+				const isChecked = $(this).is(':checked');
+				
+				// 체크박스 ID에 따라 해당 위치 드롭다운 활성화/비활성화
+				if (checkboxId === 'copybot_tag_remove_inputfield') {
+					$('#copybot_tag_remove_position').prop('disabled', !isChecked);
+				} else if (checkboxId === 'copybot_delete_inputfield') {
+					$('#copybot_delete_position').prop('disabled', !isChecked);
+				} else if (checkboxId === 'copybot_delete_regenerate_inputfield') {
+					$('#copybot_delete_regenerate_position').prop('disabled', !isChecked);
+				}
+				
+				if (callbacks.safeUpdateInputFieldIcons) callbacks.safeUpdateInputFieldIcons();
+				if (callbacks.saveSettings) callbacks.saveSettings();
+				if (callbacks.debugLog && isDebugMode) callbacks.debugLog(true, '입력필드 체크박스 변경:', checkboxId, '→', isChecked ? 'ON' : 'OFF');
+			});
+
+			// ===== 소메뉴 아이콘 클릭 이벤트 =====
+			
+			// 태그제거 아이콘 클릭
+			$(document).off('click', '#copybot_submenu_tag_remove').on('click', '#copybot_submenu_tag_remove', function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				if (callbacks.removeTagsFromElement) {
+					callbacks.removeTagsFromElement('#send_textarea');
+				}
+				if (callbacks.debugLog && isDebugMode) callbacks.debugLog(true, '소메뉴: 태그제거 실행');
+			});
+
+			// 삭제 아이콘 클릭 (좆됨방지는 commands.js에서 처리)
+			$(document).off('click', '#copybot_submenu_delete').on('click', '#copybot_submenu_delete', function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				if (callbacks.executeSimpleCommand) {
+					callbacks.executeSimpleCommand('/del 1', '마지막 메시지 1개를 삭제했습니다.');
+				}
+				if (callbacks.debugLog && isDebugMode) callbacks.debugLog(true, '소메뉴: 삭제 실행');
+			});
+
+			// 재생성 아이콘 클릭 (폴링 방식 - smartDeleteAndRegenerate 사용)
+			$(document).off('click', '#copybot_submenu_regenerate').on('click', '#copybot_submenu_regenerate', function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				if (callbacks.smartDeleteAndRegenerate) {
+					callbacks.smartDeleteAndRegenerate();
+				}
+				if (callbacks.debugLog && isDebugMode) callbacks.debugLog(true, '소메뉴: 재생성 실행 (폴링 방식)');
 			});
 
 			// ===== 퀵메뉴 설정 이벤트 핸들러 =====
