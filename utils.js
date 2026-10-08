@@ -27,7 +27,7 @@
             try {
                 const context = window.SillyTavern.getContext();
                 if (!context || !context.chat || context.chat.length === 0) {
-                    console.warn('깡갤 복사기: 대화 기록이 없습니다.');
+                    this.debugLog(window.copybot_debug_mode, '대화 기록이 없습니다.');
                     return 0;
                 }
                 

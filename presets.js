@@ -33,7 +33,27 @@
         },
 
         // === 데이터 관리 ===
-        
+
+        // 설정 저장소에 쓰는 단일 통로 (settings.js 와 같은 규칙):
+        //  • 로드에 실패한 세션(copybot_settings_load_failed)에서는 쓰지 않는다 — 기존 저장본 보호
+        //  • 백업 키는 "덮어쓰기 직전의 이전 저장본" (같은 값을 두 번 쓰지 않음)
+        _writeSettings: function(settings) {
+            if (window.copybot_settings_load_failed) {
+                this.debugLog('설정 로드 실패 상태라 프리셋 저장 생략(기존 저장본 보호)');
+                return false;
+            }
+            if (window.copybot_resetting) return false;   // 초기화 진행 중
+            settings._savedAt = Date.now();   // 브라우저 vs 실리 계정 사본 최신 판별용 (settings.js 와 동일 규칙)
+            const json = JSON.stringify(settings);
+            let prev = null;
+            try { prev = localStorage.getItem('copybot_settings'); } catch (e) { /* 무시 */ }
+            if (prev && prev !== json) localStorage.setItem('copybot_settings_backup', prev);
+            localStorage.setItem('copybot_settings', json);
+            sessionStorage.setItem('copybot_settings_temp', json);
+            window.CopyBotSettings?.writeServerCopy?.(json);   // 실리 계정에도 같은 내용
+            return true;
+        },
+
         // 프리셋 목록 가져오기 (다중 소스 복구 로직)
         getPresets: function() {
             try {
@@ -145,11 +165,8 @@
                     }
                 }
                 
-                // 다중 백업 저장
-                localStorage.setItem('copybot_settings', JSON.stringify(settings));
-                localStorage.setItem('copybot_settings_backup', JSON.stringify(settings));
-                sessionStorage.setItem('copybot_settings_temp', JSON.stringify(settings));
-                
+                if (!this._writeSettings(settings)) return false;
+
                 this.debugLog('프리셋 저장 완료 (일반설정 통합):', presets.length, '개');
                 return true;
             } catch (e) {
@@ -358,9 +375,9 @@
                     settings.ghostwrite.text = currentPrompt;
                     settings.ghostwrite.excludeText = currentExcludePrompt;
                     settings.ghostwrite.profile = currentProfile;
-                    
-                    localStorage.setItem('copybot_settings', JSON.stringify(settings));
-                    
+
+                    this._writeSettings(settings);
+
                     this.setActivePreset(selectedName);
                     
                     // 자동저장일 때는 토스트 메시지 생략, 하지만 저장 로직은 동일하게 실행
@@ -406,7 +423,7 @@
                 } else {
                     // 예외 상황: 새 프리셋 생성 프로세스 유지 (자동저장에서는 실행하지 않음)
                     if (!isAutoSave) {
-                        let name = prompt("저장할 새 프리셋의 이름을 입력하세요:", "");
+                        let name = prompt("저장할 새 프리셋의 이름을 입력해 주십시오:", "");
                         if (!name || name.trim() === '') {
                             if (name !== null && window.toastr) toastr.warning("프리셋 이름은 비워둘 수 없습니다.");
                             return;
@@ -666,12 +683,9 @@
                 }
                 
                 settings.ghostwrite.activePreset = presetName;
-                
-                // 다중 백업 저장 (일반설정과 동일한 방식)
-                localStorage.setItem('copybot_settings', JSON.stringify(settings));
-                localStorage.setItem('copybot_settings_backup', JSON.stringify(settings));
-                sessionStorage.setItem('copybot_settings_temp', JSON.stringify(settings));
-                
+
+                this._writeSettings(settings);
+
                 // 레거시 지원 (하위 호환성)
                 localStorage.setItem('copybot_active_preset', presetName);
                 
@@ -755,7 +769,7 @@
             if (selectedPresetName === '기본 프리셋') {
                 $('#copybot_preset_rename_input').val(selectedPresetName).show().prop('disabled', true);
             } else {
-                $('#copybot_preset_rename_input').val(selectedPresetName).show().prop('disabled', false).trigger('focus');
+                $('#copybot_preset_rename_input').val(selectedPresetName).show().prop('disabled', false);   // 자동 포커스 금지(모바일 키보드)
             }
             
             $('#copybot_ghostwrite_textbox, #copybot_ghostwrite_exclude_textbox').prop('disabled', true);
@@ -786,7 +800,7 @@
                 editButton.removeClass('disabled').attr('title', '프리셋 편집 모드 시작');
             } else {
                 // 선택된 프리셋이 없는 경우 (예외 상황)
-                editButton.addClass('disabled').attr('title', '편집할 프리셋을 선택하세요');
+                editButton.addClass('disabled').attr('title', '편집할 프리셋을 선택해야 합니다');
             }
         },
 

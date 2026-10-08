@@ -28,8 +28,8 @@
 
                 const lastMessageIndex = utils.getLastMessageIndex();
                 
-                // 기본 유효성 검사
-                if (typeof startIndex !== 'number' || typeof endIndex !== 'number') {
+                // 기본 유효성 검사 (NaN 은 typeof 'number' 라서 통과하던 구멍 → 정수만 허용)
+                if (!Number.isInteger(startIndex) || !Number.isInteger(endIndex)) {
                     if (utils.debugLog) {
                         utils.debugLog(window.copybot_debug_mode, 'messageOperations: 인덱스는 숫자여야 함');
                     }
@@ -197,13 +197,9 @@
                 // /hide 명령어 구성
                 const hideCommand = `/hide ${startIndex}-${endIndex}`;
                 
-                // 명령어 실행
-                return commands.executeSimpleCommand(
-                    hideCommand,
-                    `메시지 ${startIndex}번부터 ${endIndex}번까지 숨겨졌습니다.`,
-                    null, // callback
-                    false // isGhostwriting
-                );
+                // 명령어 실행 (입력창을 거치지 않는 조용한 경로 우선)
+                const runHide = commands.executeSilentCommand || commands.executeSimpleCommand;
+                return runHide.call(commands, hideCommand, `메시지 ${startIndex}번부터 ${endIndex}번까지 숨겨졌습니다.`);
 
             } catch (error) {
                 console.error('깡갤 복사기: /hide 명령어 실행 실패', error);
@@ -237,13 +233,9 @@
                 // /unhide 명령어 구성
                 const unhideCommand = `/unhide ${startIndex}-${endIndex}`;
                 
-                // 명령어 실행
-                return commands.executeSimpleCommand(
-                    unhideCommand,
-                    `메시지 ${startIndex}번부터 ${endIndex}번까지 다시 보이게 되었습니다.`,
-                    null, // callback
-                    false // isGhostwriting
-                );
+                // 명령어 실행 (입력창을 거치지 않는 조용한 경로 우선)
+                const runUnhide = commands.executeSilentCommand || commands.executeSimpleCommand;
+                return runUnhide.call(commands, unhideCommand, `메시지 ${startIndex}번부터 ${endIndex}번까지 다시 보이게 되었습니다.`);
 
             } catch (error) {
                 console.error('깡갤 복사기: /unhide 명령어 실행 실패', error);
@@ -267,8 +259,10 @@
                 }
 
                 // 인덱스 유효성 검사
+                // 모든 범위 삭제 진입 경로(설정창·퀵/플로팅 메뉴)가 여기 한 곳을 거친다 — 마지막 메시지 초과 검사 포함
                 if (!this.validateMessageIndices(startIndex, endIndex)) {
-                    toastr.error('올바르지 않은 메시지 번호입니다.');
+                    const last = utils.getLastMessageIndex();
+                    toastr.error(`메시지 번호는 0~${last} 사이의 정수여야 하고, 시작이 끝보다 클 수 없습니다.`);
                     return false;
                 }
 
@@ -286,10 +280,9 @@
                     utils.debugLog(window.copybot_debug_mode, `messageOperations: 다중 삭제 실행 시도 - ${startIndex}부터 ${endIndex}까지 (총 ${deleteCount}개)`);
                 }
 
-                // 다중 삭제 로직 구현
-                toastr.info('다중 삭제 기능은 구현 완료.');
-                
-                return true;
+                // 실제 삭제: 실리 기본 /cut (위에서 이미 확인창을 띄웠으므로 중복 확인은 건너뜀). 검증된 정수만 명령에 넣는다
+                const run = commands.executeSilentCommand || commands.executeSimpleCommand;
+                return run.call(commands, `/cut ${startIndex}-${endIndex}`, `메시지 ${startIndex}~${endIndex} 삭제 완료`, { skipConfirm: true });
 
             } catch (error) {
                 console.error('깡갤 복사기: 다중 삭제 실행 실패', error);

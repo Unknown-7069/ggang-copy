@@ -2,7 +2,7 @@
 
 .copybot_panel {
     margin: 2px 0;
-    padding: 2px 8px;
+    padding: 2px 3px;   /* 좌우 여백 축소 (2026-10-09 유저 지시) */
     background: rgba(255, 255, 255, 0.2);
     border-radius: 12px;
     border: none;
@@ -43,7 +43,7 @@
 /* 섹션 구분 */
 .copybot_section {
     margin: 6px 0;
-    padding: 12px 16px 8px 16px;
+    padding: 10px 9px 8px 9px;   /* 좌우 여백 축소 (2026-10-09 유저 지시) */
     border: 2px solid #e2e8f0;
     border-radius: 8px;
     background: #f8fafc;
@@ -122,9 +122,11 @@
 /* 텍스트박스 아래 버튼들 스타일 */
 .copybot_textbox_buttons {
     display: flex;
+    flex-wrap: wrap;            /* 폰 폭(411px)에서 버튼이 상자 밖으로 13px 넘치던 것 → 줄바꿈 (넓으면 한 줄 그대로) */
     gap: 6px;
     margin-top: 8px;
     margin-bottom: 10px;
+    max-width: 100%;
 }
 
 .copybot_textbox_button {
@@ -350,7 +352,7 @@
 /* 설정창 스타일 - 미니멀 화이트 디자인 */
 .copybot_settings_panel {
     margin-top: 8px;
-    padding: 16px;
+    padding: 12px 9px;   /* 좌우 여백 축소 (2026-10-09 유저 지시) */
     background: #ffffff;
     border: 1px solid #e1e5e9;
     border-radius: 8px;
@@ -674,7 +676,7 @@
 }
 
 /* 단순 복사 버튼 (종료위치 우측에 배치) */
-#copybot_execute {
+#copybot_execute, #copybot_capture_execute {
     padding: 7px 12px !important;
     font-weight: 500 !important;
     font-size: 14px !important;
@@ -689,7 +691,7 @@
     margin-left: auto !important;
 }
 
-#copybot_execute:hover {
+#copybot_execute:hover, #copybot_capture_execute:hover {
     background: #3182ce !important;
     transform: translateY(-1px) !important;
     box-shadow: 0 2px 6px rgba(66, 153, 225, 0.3) !important;
@@ -893,7 +895,7 @@
         border: 1px solid rgba(226, 232, 240, 0.5) !important;
     }
     
-    #copybot_execute {
+    #copybot_execute, #copybot_capture_execute {
         padding: 6px 10px !important;
         font-size: 12px !important;
         flex: 0 0 auto !important;
@@ -1088,10 +1090,6 @@
     padding: 0; /* 불필요한 여백 제거 */
 }
 
-/* 로딩 중일 때 버튼 자체의 스타일 */
-#send_but.send-button-loading {
-    cursor: wait !important; /* 마우스 커서를 로딩 모양으로 */
-}
 
 
 /* [개선] 대필 제외 지시문 텍스트박스 포커스 스타일 */
@@ -1298,6 +1296,11 @@
     max-height: 50vh;
     overflow-y: auto;
 }
+
+.copybot_icon_order_list { list-style: none; margin: 6px 0 0; padding: 0; }
+.copybot_icon_order_row { display: flex; align-items: center; justify-content: space-between; }
+.copybot_icon_order_row .copybot_reorder_buttons button { margin-left: 4px; padding: 2px 8px; font-size: 12px; }
+.copybot_title_icon { margin-right: 2px; opacity: 0.9; }
 
 .copybot_reorder_item {
     display: flex;
@@ -2174,9 +2177,14 @@
 /* 소메뉴 아이콘 컨테이너 (우측 정렬) */
 .copybot_submenu_icons {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 4px;
-    margin-left: auto;
+    gap: 6px;
+    flex-basis: 100%;
+    width: 100%;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(128, 128, 128, 0.3);
 }
 
 /* 소메뉴 개별 아이콘 */
@@ -2205,4 +2213,956 @@
 .copybot_submenu_icon:active {
     transform: translateY(0);
     background: #dee2e6;
+}
+/* ===================================================================
+   🔹 재생성 단계별 지속 토스트 (generation.js)
+   =================================================================== */
+.copybot_stage_toast {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.copybot_stage_text {
+    flex: 1;
+    line-height: 1.4;
+}
+
+.copybot_stage_abort {
+    flex: none;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(229, 62, 62, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.copybot_stage_abort:hover {
+    background: rgba(197, 48, 48, 0.95);
+}
+
+/* ===================================================================
+   🔹 커스텀 버튼 슬롯 (편의기능)
+   =================================================================== */
+.copybot_custom_slot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    padding: 6px 0;
+    max-width: 100%;
+    min-width: 0;
+    border-bottom: 1px dashed rgba(128, 128, 128, 0.25);
+}
+
+.copybot_custom_slot:last-child {
+    border-bottom: none;
+}
+
+.copybot_custom_slot .copybot_icon_picker {
+    margin: 0;
+}
+
+.copybot_custom_slot .copybot_custom_action {
+    flex: 1 1 150px;
+    min-width: 140px;
+}
+
+.copybot_custom_slot_remove {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    line-height: 1;
+    font-size: 16px;
+    border-radius: 6px;
+    border: 1px solid rgba(128, 128, 128, 0.4);
+    background: rgba(128, 128, 128, 0.12);
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.copybot_custom_slot_remove:hover {
+    opacity: 1;
+    background: rgba(229, 62, 62, 0.25);
+}
+
+.copybot_custom_slot_add {
+    margin-top: 6px;
+}
+
+.copybot_custom_slot_options {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;            /* 폰 폭에서 오른쪽으로 삐져나오지 않게 줄바꿈 허용 */
+    flex-basis: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+/* 입력필드 위치 선택: 남는 폭만큼만 쓰고 절대 패널 밖으로 안 나감 */
+.copybot_custom_slot_options .copybot_custom_position {
+    flex: 1 1 90px;
+    min-width: 90px !important;
+    max-width: 100%;
+    width: auto !important;
+}
+
+.copybot_custom_slot_options .copybot_convenience_label {
+    font-size: 12px;
+}
+
+.copybot_custom_slot_desc {
+    flex-basis: 100%;
+    font-size: 11px;
+    color: #888;
+    padding-left: 2px;
+}
+
+/* ===================================================================
+   🔹 플로팅 메뉴 버튼 (wandMenu.js)
+   =================================================================== */
+#copybot_float_button {
+    position: fixed;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: var(--SmartThemeBodyColor, #fff);
+    background: var(--SmartThemeBlurTintColor, rgba(40, 40, 40, 0.85));
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.3));
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    cursor: grab;
+    z-index: 10000;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    opacity: 0.85;
+    transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+#copybot_float_button:hover {
+    opacity: 1;
+}
+
+#copybot_float_button.copybot_float_dragging {
+    cursor: grabbing;
+    opacity: 1;
+    transform: scale(1.08);
+}
+
+/* 퀵메뉴 안의 커스텀 버튼 섹션: 2열 그리드 */
+.copybot_quick_custom_grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+}
+
+.copybot_quick_custom_grid .copybot_quick_btn_third {
+    justify-content: flex-start;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 입력창 안내문 변경 옵션 */
+#copybot_placeholder_replace_options textarea,
+#copybot_placeholder_replace_options input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#copybot_placeholder_css {
+    min-height: 56px;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+/* ===================================================================
+   🔹 결과 텍스트박스 크게 보기
+   =================================================================== */
+.copybot_textbox_wrap {
+    position: relative;
+}
+
+#copybot_textbox_expand {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    border-radius: 4px;
+    color: var(--SmartThemeQuoteColor, #888);
+    background: rgba(128, 128, 128, 0.12);
+    cursor: pointer;
+    opacity: 0.75;
+    transition: opacity 0.15s ease, background 0.15s ease;
+    z-index: 2;
+}
+
+#copybot_textbox_expand:hover {
+    opacity: 1;
+    background: rgba(128, 128, 128, 0.25);
+}
+
+#copybot_textbox_overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    height: 100dvh !important;
+    box-sizing: border-box;
+    z-index: 20000;
+    display: flex;
+    flex-direction: column;
+    background: var(--SmartThemeBlurTintColor, rgba(20, 20, 20, 0.96));
+    padding: 10px;
+    gap: 8px;
+}
+
+#copybot_textbox_overlay .copybot_overlay_bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#copybot_textbox_overlay .copybot_overlay_title {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--SmartThemeBodyColor, #ddd);
+}
+
+#copybot_textbox_overlay .copybot_overlay_bar button {
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: 6px;
+    border: 1px solid var(--SmartThemeBorderColor, #555);
+    background: rgba(128, 128, 128, 0.15);
+    color: var(--SmartThemeBodyColor, #ddd);
+    cursor: pointer;
+}
+
+#copybot_textbox_overlay textarea {
+    flex: 1;
+    width: 100%;
+    box-sizing: border-box;
+    resize: none;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--SmartThemeBorderColor, #555);
+    background: var(--SmartThemeChatTintColor, rgba(0, 0, 0, 0.3));
+    color: var(--SmartThemeBodyColor, #eee);
+}
+
+/* ===================================================================
+   🔹 캡처 익명화 규칙 목록 — 공통 / 캐릭터별 섹션을 색 띠로 분리
+   =================================================================== */
+.copybot_rule_group {
+    position: relative;
+    padding: 8px 10px 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.15));
+    border-left: 4px solid var(--copybot-rule-accent, #888);
+    background: rgba(0, 0, 0, 0.12);
+}
+
+.copybot_rule_group + .copybot_rule_group {
+    margin-top: 10px;
+}
+
+.copybot_rule_group--global { --copybot-rule-accent: #4a90e2; }
+.copybot_rule_group--char   { --copybot-rule-accent: #e6a23c; }
+
+.copybot_rule_badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 3px 6px;
+    margin-right: 6px;
+    border-radius: 4px;
+    color: #fff;
+    background: var(--copybot-rule-accent, #888);
+    vertical-align: 1px;
+}
+
+.copybot_rule_group_title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+}
+
+.copybot_rule_group_title small {
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+.copybot_rule_scope_name {
+    font-size: 11px;
+    opacity: 0.75;
+    margin-bottom: 4px;
+}
+
+.copybot_rule_list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+.copybot_rule_row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.copybot_rule_row input[type="text"] {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: 12px;
+}
+
+.copybot_rule_arrow {
+    flex: none;
+    opacity: 0.6;
+}
+
+.copybot_rule_remove {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0.6;
+}
+
+.copybot_rule_remove:hover {
+    opacity: 1;
+    background: rgba(229, 62, 62, 0.15);
+    color: #e53e3e;
+}
+
+/* 추가 버튼: 삭제(×)와 같은 크기의 작은 + 아이콘만 */
+/* "+" 추가 버튼 공통: 다음 줄이 들어올 자리를 점선 빈 줄로 보여줘 "누르면 여기에 하나 더 생긴다"는 느낌 (글자 없이 + 만) */
+.copybot_add_ghost {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 30px;
+    margin: 6px 0 0;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1;
+    border-radius: 6px;
+    border: 1px dashed var(--copybot-rule-accent, currentColor);
+    background: transparent;
+    color: var(--copybot-rule-accent, inherit);
+    opacity: 0.55;
+    cursor: pointer;
+    user-select: none;
+    transition: opacity 0.15s, background-color 0.15s;
+}
+.copybot_add_ghost:hover,
+.copybot_add_ghost:active {
+    opacity: 1;
+    background: rgba(127, 127, 127, 0.12);
+}
+.copybot_add_ghost i { pointer-events: none; }
+
+.copybot_rule_add { /* 익명화 규칙 추가 (.copybot_add_ghost 와 함께 씀) */ }
+
+/* 기타 탭 맨 아래: 업데이트 섹션 */
+.copybot_update_version {
+    margin-left: auto;
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+.copybot_update_row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+    max-width: 100%;
+}
+
+.copybot_update_btn {
+    font-size: 12px;
+    padding: 4px 12px;
+}
+
+/* 확장 설정 전체 초기화 — 위험 동작이라 빨간 계열 */
+#copybot_settings .menu_button.copybot_reset_btn {
+    color: #e53e3e !important;          /* 실리 .menu_button 색을 이기려면 특이도 + !important 둘 다 필요(폰 실측) */
+    border-color: #e53e3e !important;
+}
+#copybot_settings .menu_button.copybot_reset_btn:hover {
+    background-color: rgba(229, 62, 62, 0.15) !important;
+}
+
+.copybot_update_status {
+    font-size: 12px;
+    flex: 1 1 100%;
+    min-width: 0;
+    word-break: break-word;
+}
+
+.copybot_update_info {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(128, 128, 128, 0.3);
+    font-size: 11px;
+    opacity: 0.75;
+    line-height: 1.6;
+}
+
+/* 미리보기 요소 목록: 묶음(공통/봇별) 제목 — 익명화 섹션과 같은 뱃지·강조색 변수 재사용 */
+.copybot_capture_kind_group_title .copybot_rule_badge {
+    padding: 2px 5px;
+    margin-right: 4px;
+}
+
+/* 캡처 표시 요소 (봇/유저 × 프사·이름·메시지) */
+.copybot_role_grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 6px;
+    max-width: 100%;
+}
+
+.copybot_role_row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font-size: 12px;
+}
+
+.copybot_role_row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.copybot_role_name {
+    display: inline-block;
+    min-width: 2.5em;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #fff;
+    background: #4a90e2;
+    text-align: center;
+}
+
+.copybot_role_row--user .copybot_role_name {
+    background: #e6a23c;
+}
+
+/* ===================================================================
+   🔹 메인 모드 전환 (텍스트 복사 / 캡처)
+   =================================================================== */
+.copybot_mode_toggle {
+    display: flex;
+    gap: 4px;
+    margin: 4px 0 8px 0;
+    padding: 3px;
+    border-radius: 8px;
+    background: rgba(128, 128, 128, 0.12);
+}
+
+.copybot_mode_toggle button {
+    flex: 1;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--SmartThemeBodyColor, #ccc);
+    opacity: 0.75;
+    cursor: pointer;
+}
+
+.copybot_mode_toggle button.active {
+    opacity: 1;
+    background: var(--SmartThemeBlurTintColor, rgba(255, 255, 255, 0.12));
+    border-color: var(--SmartThemeBorderColor, #666);
+}
+
+/* ===================================================================
+   🔹 캡처 미리보기
+   =================================================================== */
+.copybot_capture_preview_bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+.copybot_capture_preview_info {
+    flex: 1 1 100%;
+    font-size: 12px;
+    color: #666;
+}
+
+.copybot_capture_thumbs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 4px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: rgba(128, 128, 128, 0.06);
+}
+
+.copybot_capture_thumb img,
+.copybot_capture_overlay_item img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 4px;
+    background: #fff;
+}
+
+.copybot_capture_thumb_bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: #666;
+    margin: 2px 0;
+}
+
+.copybot_capture_thumb_bar span {
+    flex: 1;
+}
+
+.copybot_capture_thumb_bar button {
+    padding: 2px 8px;
+    font-size: 11px;
+}
+
+.copybot_capture_kinds_wrap {
+    margin-top: 8px;
+}
+
+.copybot_capture_kinds {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.copybot_capture_kind_group_title {
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.8;
+    margin-bottom: 2px;
+}
+
+.copybot_capture_kinds_row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+}
+
+.copybot_capture_kind {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgba(128, 128, 128, 0.1);
+    cursor: pointer;
+}
+
+.copybot_capture_kind small {
+    opacity: 0.7;
+}
+
+/* 살아있는 미리보기: 패널 안 상자 */
+.copybot_capture_box {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 6px 0;
+    padding: 8px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.copybot_capture_box .copybot_capture_overlay_body {
+    max-height: 60vh;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 6px;
+    background: rgba(128, 128, 128, 0.06);
+}
+
+.copybot_capture_box .copybot_overlay_bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.copybot_capture_box .copybot_overlay_title { flex: 1 1 100%; font-size: 13px; font-weight: 600; }
+.copybot_capture_box .copybot_overlay_title small { font-weight: 400; opacity: 0.75; }
+.copybot_capture_box .copybot_overlay_bar button { padding: 5px 10px; font-size: 12px; border-radius: 6px; border: 1px solid var(--SmartThemeBorderColor, #999); background: rgba(128, 128, 128, 0.15); color: inherit; cursor: pointer; }
+
+.copybot_capture_box .copybot_capture_kinds_wrap {
+    margin: 0;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: rgba(128, 128, 128, 0.12);
+    max-height: 40vh;
+    overflow: auto;
+}
+
+/* 전체 화면 dialog (body 직속, top layer) */
+#copybot_capture_dialog {
+    display: none;
+}
+
+#copybot_capture_dialog[open] {
+    display: flex;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100% !important;
+    height: 100dvh !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 10px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    z-index: 20000;
+    background: var(--SmartThemeBlurTintColor, rgba(20, 20, 20, 0.96));
+    color: var(--SmartThemeBodyColor, #ddd);
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+#copybot_capture_dialog .copybot_capture_overlay_body {
+    max-height: none;
+    overflow: visible;
+    background: transparent;
+}
+
+#copybot_capture_dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+
+.copybot_capture_frame_holder {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    flex: 0 0 auto;             /* 바깥 상자(flex column)가 holder 를 눌러 줄이지 않게 — 내용 높이 그대로, 스크롤은 상자가 */
+}
+
+#copybot_capture_frame {
+    display: block;
+    border: 0;
+    transform-origin: top left;
+}
+
+.copybot_kind_hidden {
+    display: none !important;
+}
+
+
+
+
+
+.copybot_capture_overlay_body {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 캡처 모드: 고급 설정 톱니바퀴 (캡처 버튼 오른쪽) */
+.copybot_capture_gear {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    border-radius: 6px;
+    color: var(--SmartThemeQuoteColor, #718096);
+    background: rgba(128, 128, 128, 0.12);
+    cursor: pointer;
+    opacity: 0.85;
+    transition: opacity 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.copybot_capture_gear:hover {
+    opacity: 1;
+    background: rgba(128, 128, 128, 0.25);
+}
+
+.copybot_capture_gear.active {
+    opacity: 1;
+    color: #ffffff;
+    background: #4299e1;
+    transform: rotate(90deg);
+}
+
+.copybot_capture_advanced {
+    margin-top: 6px;
+}
+
+/* 캡처 모드 번호 입력칸: 조금 더 넓게 */
+#copybot_mode_capture .copybot_input_group input.text_pole.copybot_capture_num {
+    width: 64px !important;
+}
+
+@media (max-width: 480px) {
+    #copybot_mode_capture .copybot_input_group input.text_pole.copybot_capture_num {
+        width: 58px !important;
+    }
+}
+
+/* 미리보기: iframe 은 내용 높이 전부, 스크롤은 바깥 상자가 (축소된 iframe 안 스크롤은 폰에서 걸림).
+   패널 안 상자는 화면 60% 높이 안에서 스크롤 (2026-10-09 유저 확정: 패널 안에서도 스크롤되어야 함, 크게보기는 자체 스크롤) */
+.copybot_capture_box .copybot_capture_overlay_body {
+    max-height: 60vh;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
+/* 공통 익명화 맨 위: 페르소나 이름 항상 익명화 (체크 + 바꿀 글자) */
+.copybot_persona_anon_row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 12px;
+    margin: 2px 0 0;
+    cursor: pointer;
+}
+.copybot_persona_anon_arrow { opacity: 0.6; }
+/* 페르소나 자동 익명화 ↔ 유저가 직접 적는 공통 규칙 사이 구분선 */
+.copybot_rule_divider {
+    border-top: 1px dashed var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.45));
+    margin: 2px 0 10px;
+}
+.copybot_persona_anon_row input.text_pole.copybot_persona_anon_to {
+    flex: 0 1 110px;
+    width: 110px !important;
+    min-width: 0;
+    margin: 0;
+    font-size: 12px;
+}
+
+#copybot_capture_dialog .copybot_capture_overlay_body {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
+/* 크게 보기 헤더의 톱니: 캡처 옵션 패널을 여기로 잠시 옮겨 보여줌 (복제 아님) */
+.copybot_overlay_options {
+    flex: 0 1 auto;
+    max-height: 55vh;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.2));
+    border-radius: 8px;
+    background: var(--SmartThemeBlurTintColor, rgba(20, 20, 20, 0.96));
+    color: var(--SmartThemeBodyColor, #ddd);
+    padding: 6px 8px;
+}
+
+.copybot_overlay_options_head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.copybot_overlay_options_body #copybot_capture_panel {
+    display: block !important;
+    margin: 0;
+}
+
+/* 메시지 정리: 숨김 구간 확인 줄 — 버튼은 평범한 가로 버튼으로 */
+.copybot_hidden_check_row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.copybot_plain_button {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    writing-mode: horizontal-tb !important;
+    white-space: nowrap !important;
+    width: auto !important;
+    min-width: max-content !important;
+    flex: 0 0 auto !important;
+    padding: 5px 12px !important;
+    line-height: 1.3 !important;
+}
+
+#copybot_hidden_result {
+    flex: 1 1 120px;
+    min-width: 0;
+}
+
+#copybot_capture_dialog[open] {
+    overflow: hidden;
+}
+
+/* 미리보기 상자 상단 줄: 제목 + 우측 아이콘(크게/작게 보기, ✕) */
+.copybot_capture_box .copybot_overlay_bar_top {
+    flex-wrap: nowrap;
+}
+
+.copybot_capture_box .copybot_overlay_bar_top .copybot_overlay_title {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.copybot_overlay_icon {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    border-radius: 6px;
+    color: var(--SmartThemeQuoteColor, #718096);
+    background: rgba(128, 128, 128, 0.12);
+    cursor: pointer;
+    opacity: 0.85;
+}
+
+.copybot_overlay_icon:hover {
+    opacity: 1;
+    background: rgba(128, 128, 128, 0.25);
+}
+
+.copybot_overlay_icon.copybot_overlay_close:hover {
+    color: #ffffff;
+    background: rgba(229, 62, 62, 0.85);
+}
+
+.copybot_capture_box .copybot_overlay_clear {
+    margin-left: auto;
+    color: #ffffff !important;
+    border-color: transparent !important;
+}
+
+/* 상단바 ↶ ↷ (요소 넣고 빼기 되돌리기): 제목 바로 오른쪽, 창 조작 아이콘(접기·크게보기·비우기)과 간격을 둬 묶음을 구분 */
+.copybot_capture_box .copybot_overlay_history {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 10px;
+}
+
+.copybot_overlay_icon_disabled {
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+#copybot_capture_dialog .copybot_overlay_icon {
+    color: var(--SmartThemeBodyColor, #ddd);
+}
+
+/* 미리보기 상자: 접힘 상태(헤더만) · 위험(비우기) 아이콘 · 힌트 */
+.copybot_capture_box_collapsed {
+    padding: 6px 8px;
+}
+
+.copybot_overlay_icon_danger {
+    color: #e53e3e;
+}
+
+.copybot_overlay_icon_danger:hover {
+    color: #ffffff;
+    background: rgba(229, 62, 62, 0.85);
+}
+
+.copybot_capture_hint {
+    flex: 1 1 auto;
+    text-align: right;
+    font-size: 11px;
+    opacity: 0.65;
+    white-space: nowrap;
+}
+
+.copybot_capture_box_body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* 확장 안 모든 예시 글씨(placeholder): 더 연하고 흐리게 */
+#copybot_settings input::placeholder,
+#copybot_settings textarea::placeholder,
+.copybot_capture_box input::placeholder,
+#copybot_textbox_overlay textarea::placeholder {
+    color: inherit !important;
+    opacity: 0.32 !important;
+    font-weight: 300;
+}
+
+#copybot_settings input::-webkit-input-placeholder,
+#copybot_settings textarea::-webkit-input-placeholder {
+    color: inherit !important;
+    opacity: 0.32 !important;
 }

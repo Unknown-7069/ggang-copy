@@ -49,7 +49,7 @@
                 const tempPrompt = $('#copybot_temp_prompt').val();
                 sessionStorage.setItem('copybot_temp_prompt', tempPrompt);
             } catch (error) {
-                console.warn('깡갤 복사기: 임시 프롬프트 저장 실패', error);
+                window.CopyBotUtils?.debugLog(window.copybot_debug_mode, '임시 프롬프트 저장 실패', error);
             }
         },
 
@@ -61,7 +61,7 @@
                     $('#copybot_temp_prompt').val(savedTempPrompt);
                 }
             } catch (error) {
-                console.warn('깡갤 복사기: 임시 프롬프트 로드 실패', error);
+                window.CopyBotUtils?.debugLog(window.copybot_debug_mode, '임시 프롬프트 로드 실패', error);
             }
         },
 
@@ -118,7 +118,7 @@
 
             } catch (error) {
                 // 에러가 발생해도 기본 기능은 유지
-                console.warn('깡갤 복사기: 초기값 동기화 실패, 기본값 유지하며 정상 작동', error);
+                window.CopyBotUtils?.debugLog(window.copybot_debug_mode, '초기값 동기화 실패, 기본값 유지하며 정상 작동', error);
                 
                 // Fallback: 빈 값으로라도 초기화하여 기본 동작 보장
                 this._lastSavedValues.basicPrompt = '';
@@ -144,7 +144,7 @@
             
             const selector = selectorMap[fieldName];
             if (!selector) {
-                console.warn(`알 수 없는 필드명: ${fieldName}`);
+                window.CopyBotUtils?.debugLog(window.copybot_debug_mode, `알 수 없는 필드명: ${fieldName}`);
                 return;
             }
             
@@ -168,7 +168,7 @@
                     }, 2000); // 2초 표시 후 2초 페이드아웃 (총 4초)
                 }
             } else {
-                console.warn(`상태 아이콘 요소를 찾을 수 없음: ${selector}`);
+                window.CopyBotUtils?.debugLog(window.copybot_debug_mode, `상태 아이콘 요소를 찾을 수 없음: ${selector}`);
             }
         },
 
@@ -233,6 +233,7 @@
 				if (sendTextarea) {
 					sendTextarea.style.borderRadius = '';
 				}
+				window.copybot_refreshThemeWatch?.();
 				
 				if (this.dependencies && this.dependencies.utils) {
 					this.dependencies.utils.debugLog(window.copybot_debug_mode, '임시대필칸 제거 완료');
@@ -530,6 +531,7 @@
                 
                 // 안전한 방법: send_form의 맨 마지막에 추가 (기존 레이아웃 건드리지 않음)
                 grandParent.appendChild(tempPromptContainer);
+                window.copybot_refreshThemeWatch?.();
 
                 if (this.dependencies && this.dependencies.utils) {
                     this.dependencies.utils.debugLog(window.copybot_debug_mode, '깡갤 복사기: 임시 프롬프트 입력칸 추가 완료');
@@ -734,14 +736,17 @@
                         if (this.dependencies && this.dependencies.utils) {
                             this.dependencies.utils.debugLog(window.copybot_debug_mode, `대필 요청 시도 (${i + 1}/${maxRetries})...`);
                         }
-                        result = await context.generateQuietPrompt(overridePrompt, false, true);
+                        // 실리 1.13+ 는 객체 인자({ quietPrompt, ... }, 매개변수 길이 0). 구버전은 위치 인자. 동작은 동일(quietToLoud=false, skipWIAN=true)
+                        result = context.generateQuietPrompt.length === 0
+                            ? await context.generateQuietPrompt({ quietPrompt: overridePrompt, quietToLoud: false, skipWIAN: true })
+                            : await context.generateQuietPrompt(overridePrompt, false, true);
                         if (this.dependencies && this.dependencies.utils) {
                             this.dependencies.utils.debugLog(window.copybot_debug_mode, '✅ 대필 요청 성공!');
                         }
                         break;
                     } catch (error) {
                         const errorMessage = String(error);
-                        console.warn(`대필 시도 ${i + 1} 실패:`, errorMessage);
+                        window.CopyBotUtils?.debugLog(window.copybot_debug_mode, `대필 시도 ${i + 1} 실패:`, errorMessage);
 
                         if (!this._isGhostwritingActive || errorMessage.includes('Clicked stop button')) {
                             throw error;
@@ -773,10 +778,10 @@
                             this.dependencies.utils.debugLog(window.copybot_debug_mode, '깡갤 복사기: 대필 결과 입력창 삽입 완료');
                         }
                     } else {
-                        toastr.warning('대필 결과가 비어있습니다. 다시 시도해주세요.');
+                        toastr.warning('대필 결과가 비어있습니다. 다시 시도해 주십시오.');
                     }
                 } else if (this._isGhostwritingActive) {
-                    toastr.warning('대필 결과를 받지 못했습니다. 다시 시도해주세요.');
+                    toastr.warning('대필 결과를 받지 못했습니다. 다시 시도해 주십시오.');
                 }
                 
                 if (useTempField && this.saveTempPrompt) {
@@ -809,7 +814,7 @@
                         }
                     } catch (restoreError) {
                         console.error('!!! 치명적 오류: 프로필 원복에 실패했습니다 !!!', restoreError);
-                        toastr.error('프로필이 원래대로 복원되지 않았습니다! 수동으로 확인해주세요.');
+                        toastr.error('프로필이 원래대로 복원되지 않았습니다! 수동으로 확인해 주십시오.');
                     }
                 }
 

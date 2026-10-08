@@ -182,11 +182,15 @@
     
     // 자동 설정 (아래는 수정 금지)
     const EXTENSION_FOLDER = IS_TEST_VERSION ? 'ggang-copy-test' : 'ggang-copy';
-    const EXTENSION_NAME = IS_TEST_VERSION ? '📋 깡갤 복사기(테스트)' : '📋 깡갤 복사기';
+    const EXTENSION_NAME = IS_TEST_VERSION ? '깡갤 복사기(테스트)' : '깡갤 복사기';
+    const TITLE_ICON = 'fa-clipboard-list';   // 확장 목록 제목 아이콘 (유저 지시 2026-10-09: 클립보드 모양 — 밋밋한 기본 fa-clipboard 대신 목록 있는 클립보드)
     const BASE_PATH = `/scripts/extensions/third-party/${EXTENSION_FOLDER}`;
+    window.copybot_extension_folder = EXTENSION_FOLDER;   // 업데이트 API(commands.js)가 쓰는 설치 폴더명
     // ===================================================================
 
-    console.log(`🔥 ${EXTENSION_NAME}: 스크립트 로드 시작! (경로: ${BASE_PATH})`);
+    if (window.copybot_debug_mode || IS_TEST_VERSION) {
+        console.log(`🔥 ${EXTENSION_NAME}: 스크립트 로드 시작! (경로: ${BASE_PATH})`);
+    }
 
     // 🔒 안전장치: 플래그와 폴더명 불일치 경고
     if ((EXTENSION_FOLDER.includes('test') && !IS_TEST_VERSION) ||
@@ -203,11 +207,15 @@
     // ===================================================================
     
     // 공통 로더 함수 (코드 중복 제거)
+    // 한 번 로드된 모듈은 다시 붙이지 않는다 — 초기화 재시도 때 IIFE 가 재실행되면 모듈 내부 리스너(generation 이벤트, pagehide 등)가 이중 등록됨
+    const loadedModules = new Set();
     function createModuleLoader(fileName) {
+        if (loadedModules.has(fileName)) return Promise.resolve();
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = `${BASE_PATH}/${fileName}`;
             script.onload = () => {
+                loadedModules.add(fileName);
                 debugLog(`${EXTENSION_NAME}: ${fileName} 로드 완료`);
                 resolve();
             };
@@ -224,6 +232,9 @@
     async function loadSettingsModule() { return createModuleLoader('settings.js'); }
     async function loadPresetsModule() { return createModuleLoader('presets.js'); }
     async function loadCommandsModule() { return createModuleLoader('commands.js'); }
+    async function loadGenerationModule() { return createModuleLoader('generation.js'); }
+    async function loadActionsModule() { return createModuleLoader('actions.js'); }
+    async function loadCaptureModule() { return createModuleLoader('capture.js'); }
     async function loadIconsModule() { return createModuleLoader('icons.js'); }
 	async function loadProfilesModule() { return createModuleLoader('profiles.js'); }
 	async function loadGhostwriteModule() { return createModuleLoader('ghostwrite.js'); }
@@ -254,9 +265,9 @@
 
     // 값 변경 감지 함수 (ghostwrite 모듈 사용)
     function hasValueChanged(fieldName, currentValue) {
-        return window.CopyBotGhostwrite ? 
+        return window.CopyBotGhostwrite ?
             window.CopyBotGhostwrite.hasValueChanged(fieldName, currentValue) :
-            lastSavedValues[fieldName] !== currentValue;
+            true;
     }
 
     // 하이브리드 자동저장 함수 (ghostwrite 모듈 사용)
@@ -421,6 +432,15 @@
             false;
     }
 
+    // 디버그 모드를 모든 모듈에 전파 (저장값 로드 시 + 토글 시)
+    function applyDebugMode(enabled) {
+        isDebugMode = !!enabled;
+        window.copybot_debug_mode = !!enabled;
+        ['CopyBotCommands', 'CopyBotGeneration', 'CopyBotCapture', 'CopyBotIcons', 'CopyBotUI', 'CopyBotWandMenu'].forEach(name => {
+            try { window[name]?.setDebugMode?.(!!enabled); } catch (e) { /* 무시 */ }
+        });
+    }
+
     // 설정 로드 함수 (settings 모듈 사용)
     function loadSettings() {
         if (window.CopyBotSettings) {
@@ -430,7 +450,8 @@
                 disableHighQualityProfiles: disableHighQualityProfiles,
                 updatePresetDropdown: updatePresetDropdown, // 이제 정의됨!
                 loadPresetFromSettings: loadPresetFromSettings,
-                getPresets: getPresets
+                getPresets: getPresets,
+                setDebugMode: applyDebugMode
             };
             window.CopyBotSettings.loadSettings(callbacks);
         }
@@ -776,6 +797,19 @@
     }
 
     // 초기화 함수 (마이그레이션 포함)
+    // 초기화 재시도: 상한 5회, 재시도 타이머는 "아직 초기화 안 됐으면"만 실행 (이벤트 쪽에서 먼저 성공했으면 아무것도 안 함 → 이중 초기화 없음)
+    let initRetries = 0;
+    function scheduleInitRetry(reason) {
+        isInitialized = false;
+        if (initRetries >= 5) {
+            console.error(`깡갤 복사기: 초기화 재시도 한도 도달(${reason}) — 페이지를 새로고침해 주세요`);
+            return;
+        }
+        initRetries++;
+        debugLog(`깡갤 복사기: ${reason}. 3초 후 재시도 (${initRetries}/5)`);
+        setTimeout(() => { if (!isInitialized) initialize(); }, 3000);
+    }
+
     async function initialize() {
         if (isInitialized) return;
         isInitialized = true;
@@ -787,6 +821,9 @@
             await loadSettingsModule();
             await loadPresetsModule();
             await loadCommandsModule();
+            await loadGenerationModule();
+            await loadActionsModule();
+            await loadCaptureModule();
 			await loadIconsModule();
 			await loadProfilesModule();
 			await loadGhostwriteModule();
@@ -809,6 +846,21 @@
 				});
 			}
 
+			// generation 모듈 초기화 (생성 상태 추적 이벤트 바인딩)
+			if (window.CopyBotGeneration) {
+				window.CopyBotGeneration.init({
+					isDebugMode: isDebugMode
+				});
+			}
+
+			// capture 모듈 초기화 (vendor 라이브러리는 첫 캡처 때 지연 로드)
+			window.CopyBotBasePath = BASE_PATH;
+			if (window.CopyBotCapture) {
+				window.CopyBotCapture.init({
+					isDebugMode: isDebugMode
+				});
+			}
+
 			// icons 모듈 초기화
 			if (window.CopyBotIcons) {
 				window.CopyBotIcons.init({
@@ -821,6 +873,8 @@
 							executeSimpleCommand: (cmd, msg, callback) => window.CopyBotCommands?.executeSimpleCommand(cmd, msg, callback),
 							triggerCacheBustRegeneration: () => window.CopyBotCommands?.triggerCacheBustRegeneration(),
 							smartDeleteAndRegenerate: () => window.CopyBotCommands?.smartDeleteAndRegenerate(),
+							deleteLastMessage: () => window.CopyBotGeneration?.deleteLastMessage(),
+							runAction: (id) => window.CopyBotActions?.run(id),
 							toggleQuickMenu: () => window.CopyBotWandMenu?.toggleQuickMenu()
 						}
 				});
@@ -890,6 +944,11 @@
 						
 						// commands 모듈 함수들
 						executeSimpleCommand: executeSimpleCommand,
+						executeSilentCommand: (cmd, msg, options) => window.CopyBotCommands?.executeSilentCommand(cmd, msg, options),
+						jumpToMessage: (index, msg) => window.CopyBotCommands?.jumpToMessage(index, msg),
+						deleteLastMessage: () => window.CopyBotGeneration?.deleteLastMessage(),
+						deleteAndRegenerate: () => window.CopyBotGeneration?.deleteAndRegenerate(),
+						runAction: (id) => window.CopyBotActions?.run(id),
 						executeCopyCommand: executeCopyCommand,
 						removeTagsFromElement: removeTagsFromElement,
 						copyTextboxContent: copyTextboxContent,
@@ -929,12 +988,7 @@
 						validateMessageIndices: validateMessageIndices,
 						
 						// 기타 필요한 함수들
-						setDebugMode: (enabled) => {
-							isDebugMode = enabled;
-							if (window.CopyBotCommands) {
-								window.CopyBotCommands.setDebugMode(enabled);
-							}
-						}
+						setDebugMode: applyDebugMode
 					}
 				});
 			}
@@ -945,9 +999,30 @@
 					isDebugMode: isDebugMode,
 					callbacks: {
 						// 명령어 실행
-						executeSimpleCommand: (cmd, msg, callback) => 
+						executeSimpleCommand: (cmd, msg, callback) =>
 							window.CopyBotCommands?.executeSimpleCommand(cmd, msg, callback),
-						
+						executeSilentCommand: (cmd, msg, options) =>
+							window.CopyBotCommands?.executeSilentCommand(cmd, msg, options),
+
+						// 메시지 이동
+						jumpToMessage: (index, msg) =>
+							window.CopyBotCommands?.jumpToMessage(index, msg),
+
+						// 다중(범위) 삭제 — 검증·경고창·/cut 은 messageOperations 한 곳
+						executeMultiDelete: executeMultiDelete,
+
+						// 삭제 / 재생성 / 커스텀 동작 (generation.js, actions.js)
+						deleteLastMessage: () => window.CopyBotGeneration?.deleteLastMessage(),
+						deleteAndRegenerate: () => window.CopyBotGeneration?.deleteAndRegenerate(),
+						runAction: (id) => window.CopyBotActions?.run(id),
+						getCustomSlots: () => window.CopyBotActions?.getEnabledSlots() || [],
+
+						// 플로팅 메뉴 설정 확인
+						getFloatMenuSettings: () => ({
+							enabled: $('#copybot_float_toggle').attr('data-enabled') === 'true',
+							iconClass: $('#copybot_float_icon_picker').data('icon') || 'fa-bolt'
+						}),
+
 						// 태그 제거
 						removeTagsFromElement: (selector) => 
 							window.CopyBotCommands?.removeTagsFromElement(selector),
@@ -999,16 +1074,21 @@
             if ($("#extensions_settings2").length > 0) {
             // settings.html 내용을 수동으로 DOM에 삽입
             try {
-                const response = await fetch(`${BASE_PATH}/settings.html`);
-                const htmlContent = await response.text();
-                $("#extensions_settings2").append(htmlContent);
-                
+                if ($('#copybot_settings').length === 0) {   // 재시도 때 패널이 이미 있으면 다시 붙이지 않는다(id 중복 방지)
+                    const response = await fetch(`${BASE_PATH}/settings.html`);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const htmlContent = await response.text();
+                    $("#extensions_settings2").append(htmlContent);
+                }
+
                 // UI 타이틀 업데이트 (테스트 버전일 경우 자동으로 (테스트) 추가)
-                $("#copybot_settings .inline-drawer-header b").text(EXTENSION_NAME);
-                
+                $("#copybot_settings .inline-drawer-header b").empty()
+                    .append($('<i>').addClass(`fa-solid ${TITLE_ICON} copybot_title_icon`)).append(document.createTextNode(` ${EXTENSION_NAME}`));
+
                 debugLog(`${EXTENSION_NAME}: 설정 UI 수동 로드 완료`);
             } catch (error) {
                 console.error('깡갤 복사기: settings.html 로드 실패', error);
+                scheduleInitRetry('settings.html 로드 실패');   // 예전엔 여기서 조용히 죽었음(재시도 없음)
                 return;
             }
             
@@ -1026,6 +1106,8 @@
 					// 프리셋 관련 UI 업데이트 (순서 중요!)
 					updatePresetDropdown();
 					updatePresetEditButtonState();
+					// 기능을 하나라도 쓰고 있을 때만 문서 스크롤 가드 설치 (전부 OFF 면 전역 리스너 없음)
+					window.copybot_ensureScrollGuard();
 					
 					// 🔥 핵심 수정: 안전한 초기값 동기화 (DOM 준비 상태 확인 + Fallback)
 						setTimeout(() => {
@@ -1054,8 +1136,8 @@
 									if (e.key === 'Delete' || e.key === 'Backspace') {
 										setTimeout(() => {
 											const currentValue = $(this).val() || '';
-											// hasValueChanged로 실제 변경 여부 확인 후 저장
-											if (window.CopyBotUtils && window.CopyBotUtils.hasValueChanged(lastSavedValues, fieldName, currentValue)) {
+											// hasValueChanged로 실제 변경 여부 확인 후 저장 (ghostwrite 모듈이 마지막 저장값을 관리)
+											if (hasValueChanged(fieldName, currentValue)) {
 												scheduleDebounceAutoSave(fieldName);
 												debugLog('🔧 keyup 보완 저장:', fieldName, currentValue);
 											}
@@ -1067,7 +1149,7 @@
 								$element.off('cut.comprehensive paste.comprehensive').on('cut.comprehensive paste.comprehensive', function(e) {
 									setTimeout(() => {
 										const currentValue = $(this).val() || '';
-										if (window.CopyBotUtils && window.CopyBotUtils.hasValueChanged(lastSavedValues, fieldName, currentValue)) {
+										if (hasValueChanged(fieldName, currentValue)) {
 											scheduleDebounceAutoSave(fieldName);
 											debugLog('🔧 cut/paste 보완 저장:', fieldName, currentValue);
 										}
@@ -1078,7 +1160,7 @@
 								$element.off('drop.comprehensive').on('drop.comprehensive', function(e) {
 									setTimeout(() => {
 										const currentValue = $(this).val() || '';
-										if (window.CopyBotUtils && window.CopyBotUtils.hasValueChanged(lastSavedValues, fieldName, currentValue)) {
+										if (hasValueChanged(fieldName, currentValue)) {
 											scheduleDebounceAutoSave(fieldName);
 											debugLog('🔧 drag&drop 보완 저장:', fieldName, currentValue);
 										}
@@ -1096,16 +1178,77 @@
 					// 강화된 다중 시점 아이콘 업데이트 시도
 					scheduleIconUpdates();
 				}, 100);
-                
+
+                $(document).off('.copybot_init');   // 초기화 재시도 리스너 해제
                 debugLog('깡갤 복사기: ✅ 초기화 완료!');
             } else {
-                debugLog('깡갤 복사기: #extensions_settings2 요소를 찾을 수 없음. 3초 후 재시도...');
-                setTimeout(() => { isInitialized = false; initialize(); }, 3000);
+                scheduleInitRetry('#extensions_settings2 요소를 찾을 수 없음');
             }
         } catch(e) {
             console.error("깡갤 복사기: 초기화 실패", e);
+            scheduleInitRetry('초기화 중 예외');
         }
     }
+
+    // 문서(window) 스크롤 가드
+    // 실리는 body overflow:hidden 레이아웃이라 문서가 스크롤될 일이 없는데, 일부 테마(모바일)에서 문서가 상단바 높이(40px)만큼
+    // 더 길어져 있어 포커스·scrollIntoView 등으로 문서가 밀리면 상단 메뉴바가 화면 밖으로 사라진다.
+    // 어떤 원인(우리 코드든, 다른 확장이든, 키보드든)으로든 문서가 밀리면 즉시 0 으로 되돌린다.
+    // 어떤 기능이든 하나라도 켜져 있을 때만 설치한다 (전부 OFF 면 전역 리스너 0 — 미사용 시 무영향 원칙)
+    let scrollGuardInstalled = false;
+    function installWindowScrollGuard() {
+        if (scrollGuardInstalled) return;
+        scrollGuardInstalled = true;
+        let scheduled = false;
+        const guard = () => {
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(() => {
+                scheduled = false;
+                const se = document.scrollingElement || document.documentElement;
+                if (se.scrollTop > 0 && getComputedStyle(document.body).overflowY === 'hidden') {
+                    debugLog(`문서 스크롤 감지(${se.scrollTop}px) → 0 으로 복구`);
+                    window.scrollTo(0, 0);
+                    se.scrollTop = 0;
+                }
+            });
+        };
+        window.addEventListener('scroll', guard, { passive: true });
+        guard();
+    }
+    // 설정 패널의 토글 중 하나라도 ON 이거나 입력창 안내문 모드가 '기본'이 아니면 "사용 중"으로 본다
+    function isAnyFeatureOn() {
+        if ($('#copybot_settings .copybot_toggle_button[data-enabled="true"]').length > 0) return true;
+        const mode = $('#copybot_placeholder_mode').val();
+        return !!mode && mode !== 'off';
+    }
+    window.copybot_ensureScrollGuard = function() {
+        if (isAnyFeatureOn()) installWindowScrollGuard();
+    };
+
+    // 테마(body class) 변경 감시 — 입력창 아이콘·임시 대필칸이 실제로 있을 때만 관찰 (없으면 옵저버 해제)
+    let themeObserver = null;
+    window.copybot_refreshThemeWatch = function() {
+        const needed = !!document.querySelector('.copybot_input_field_icon, #copybot_temp_prompt');
+        if (needed && !themeObserver && document.body) {
+            themeObserver = new MutationObserver((mutations) => {
+                for (const mutation of mutations) {
+                    if (mutation.target === document.body && mutation.attributeName === 'class') {
+                        debugLog('깡갤 복사기: 테마 변경 감지, 아이콘 및 임시 프롬프트 창 업데이트');
+                        setTimeout(() => {
+                            safeUpdateInputFieldIcons();
+                            updateTempPromptStyle();
+                        }, 100);
+                        break;
+                    }
+                }
+            });
+            themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'], subtree: false });
+        } else if (!needed && themeObserver) {
+            themeObserver.disconnect();
+            themeObserver = null;
+        }
+    };
 
     $(document).ready(function() {
         debugLog('깡갤 복사기: DOM 준비 완료');
@@ -1124,31 +1267,11 @@
             }, 500);
         });
         
-        // 효율적인 테마 변경 감지 (body class 변경만 감시)
-        const themeObserver = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.target === document.body && mutation.attributeName === 'class') {
-                    debugLog('깡갤 복사기: 테마 변경 감지, 아이콘 및 임시 프롬프트 창 업데이트');
-                    setTimeout(() => {
-                        safeUpdateInputFieldIcons(); // 테마 변경 시에도 안전한 업데이트 사용
-                        updateTempPromptStyle();
-                    }, 100);
-                }
-            });
-        });
-        
-        if (document.body) {
-            themeObserver.observe(document.body, { 
-                attributes: true, 
-                attributeFilter: ['class'],
-                subtree: false 
-            });
-        }
-        
-        $(document).on('change', '#character_select', () => {
+        // 초기화 재시도용 리스너 — 초기화가 끝나면 해제한다 (initialize 끝에서 .copybot_init 네임스페이스 off)
+        $(document).on('change.copybot_init', '#character_select', () => {
             setTimeout(() => { if (!isInitialized) initialize(); }, 200);
         });
-        $(document).on('click', '[data-i18n="Extensions"]', () => {
+        $(document).on('click.copybot_init', '[data-i18n="Extensions"]', () => {
             setTimeout(() => { if (!isInitialized) initialize(); }, 500);
         });
         setTimeout(() => {
@@ -1159,6 +1282,8 @@
         }, 5000);
     });
 
-    console.log('깡갤 복사기 확장프로그램이 로드되었습니다.');
+    if (window.copybot_debug_mode) {
+        console.log('깡갤 복사기 확장프로그램이 로드되었습니다.');
+    }
 
 })();

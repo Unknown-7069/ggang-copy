@@ -23,7 +23,7 @@
 				}
 				
 				if (!callbacks.executeGhostwrite) {
-					console.warn('깡갤 복사기: CopyBotIcons - executeGhostwrite 콜백이 없습니다');
+					debugLog('CopyBotIcons - executeGhostwrite 콜백이 없습니다');
 				}
 				
 				debugLog('CopyBotIcons 모듈 초기화 완료');
@@ -118,11 +118,31 @@
 			});
 		},
 
+        // 입력창 아이콘을 보여줄 설정이 하나라도 있는가 (없으면 실리 DOM 을 전혀 건드리지 않기 위한 사전 검사)
+		anyIconConfigured: function() {
+			try {
+				if ($('#copybot_ghostwrite_toggle').attr('data-enabled') === 'true') return true;
+				for (const base of ['copybot_tag_remove', 'copybot_delete', 'copybot_delete_regenerate']) {
+					if ($(`#${base}_toggle`).attr('data-enabled') === 'true' && $(`#${base}_inputfield`).is(':checked')) return true;
+				}
+				if ($('#copybot_quickmenu_toggle').attr('data-enabled') === 'true' && $('#copybot_quickmenu_input_icon').is(':checked')) return true;
+				if ((window.CopyBotActions?.getEnabledSlots?.() || []).some(slot => slot.inputfield)) return true;
+			} catch (e) { /* 무시 */ }
+			return false;
+		},
+
         // 통합 아이콘 관리 함수 (index.js에서 이동)
 		updateInputFieldIcons: function() {
 			try {
 				debugLog('아이콘 업데이트 시작');
-        
+
+        // 미사용 시 무영향: 보여줄 아이콘도 없고 이전에 붙인 아이콘도 없으면 실리 DOM·스타일을 전혀 건드리지 않음
+        const hadIcons = document.querySelector('.copybot_input_field_icon, .copybot_independent_container') !== null;
+        if (!hadIcons && !this.anyIconConfigured()) {
+            window.copybot_refreshThemeWatch?.();
+            return;
+        }
+
         // 기존 아이콘들 제거
         document.querySelectorAll('.copybot_input_field_icon, .copybot_independent_container').forEach(el => el.remove());
 
@@ -130,8 +150,10 @@
         const textarea = document.querySelector('#send_textarea');
         const leftSendForm = document.querySelector('#leftSendForm');
 
-        if (leftSendForm) { 
-            leftSendForm.style.flexWrap = ''; 
+        // 우리가 바꿨던 #leftSendForm 인라인 스타일만 되돌림 (한 번도 안 바꿨으면 손대지 않음)
+        if (leftSendForm && leftSendForm.dataset.copybotLayout === '1') {
+            delete leftSendForm.dataset.copybotLayout;
+            leftSendForm.style.flexWrap = '';
             leftSendForm.style.maxWidth = '';
             Array.from(leftSendForm.children).forEach(child => {
                 if (!child.classList.contains('copybot_input_field_icon')) child.style.order = '';
@@ -140,11 +162,16 @@
         
         const referenceIcon = document.querySelector('#send_but');
         if (!referenceIcon) {
-            console.warn('깡갤 복사기: send_but 요소를 찾을 수 없어 아이콘 업데이트 중단');
+            debugLog('send_but 요소를 찾을 수 없어 아이콘 업데이트 중단');
             return;
         }
 
         const iconsByPosition = { right: [], left: [], bottom_right: [], bottom_left: [] };
+
+        // 유저 우선순위(설정 '입력필드 아이콘 순서') → 숫자. 작을수록 앞. 커스텀 버튼은 그룹 안에서 슬롯 순서 유지
+        const iconOrder = (window.CopyBotUI?.getIconOrder?.() || ['quickmenu', 'ghostwrite', 'tag_remove', 'delete', 'custom', 'delete_regenerate']);
+        const priorityOf = (key, sub = 0) => { const i = iconOrder.indexOf(key); return (i === -1 ? iconOrder.length : i) * 10 + sub; };
+        const ORDER_KEY_BY_TOGGLE = { copybot_ghostwrite_toggle: 'ghostwrite', copybot_tag_remove_toggle: 'tag_remove', copybot_delete_toggle: 'delete', copybot_delete_regenerate_toggle: 'delete_regenerate' };
 
         // 외부 함수들에 대한 안전한 참조 (콜백 방식으로 해결)
 		const executeGhostwrite = callbacks?.executeGhostwrite || (() => console.error('executeGhostwrite 콜백을 찾을 수 없음'));
@@ -162,7 +189,7 @@
         const allIconItems = [
             { type: 'ghostwrite', toggleId: 'copybot_ghostwrite_toggle', iconClass: getIconClass('copybot_ghostwrite_icon_picker', 'fa-user-edit'), title: '캐릭터에게 대필 요청', action: executeGhostwrite, group: 20 },
             { type: 'action', toggleId: 'copybot_tag_remove_toggle', iconClass: getIconClass('copybot_tag_remove_icon_picker', 'fa-tags'), title: '작성중인 메시지의 태그 제거', action: () => removeTagsFromElement('#send_textarea'), group: 20 },
-            { type: 'action', toggleId: 'copybot_delete_toggle', iconClass: getIconClass('copybot_delete_icon_picker', 'fa-trash'), title: '마지막 메시지 삭제', action: () => executeSimpleCommand('/del 1', '마지막 메시지 1개를 삭제했습니다.'), group: 20 },
+            { type: 'action', toggleId: 'copybot_delete_toggle', iconClass: getIconClass('copybot_delete_icon_picker', 'fa-trash'), title: '마지막 메시지 삭제', action: () => (callbacks?.deleteLastMessage ? callbacks.deleteLastMessage() : executeSimpleCommand('/del 1', '마지막 메시지 1개를 삭제했습니다.')), group: 20 },
             { type: 'action', toggleId: 'copybot_delete_regenerate_toggle', iconClass: getIconClass('copybot_delete_regenerate_icon_picker', 'fa-redo'), title: '마지막 메시지 삭제 후 재생성', action: () => callbacks?.smartDeleteAndRegenerate?.() || console.error('smartDeleteAndRegenerate 콜백을 찾을 수 없음'), group: 30 }
         ];
 
@@ -202,11 +229,31 @@
                 const currentStyle = window.getComputedStyle(referenceIcon);
                 icon.style.fontSize = currentStyle.fontSize;
                 icon.style.color = currentStyle.color;
-                icon.style.order = item.group;
+                icon.dataset.cbPriority = String(priorityOf(ORDER_KEY_BY_TOGGLE[item.toggleId] || 'custom'));
                 icon.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); item.action(); });
-                
+
                 iconsByPosition[targetPosition].push(icon);
             }
+        });
+
+        // === 커스텀 버튼 슬롯 아이콘 추가 (actions.js 레지스트리 공용) ===
+        const customSlots = window.CopyBotActions?.getEnabledSlots?.() || [];
+        customSlots.filter(slot => slot.inputfield).forEach(slot => {
+            const icon = document.createElement('div');
+            icon.className = `fa-solid ${slot.iconClass} copybot_input_field_icon copybot_custom_input_icon`;
+            icon.title = slot.label;
+            icon.dataset.action = slot.action;
+            const currentStyle = window.getComputedStyle(referenceIcon);
+            icon.style.fontSize = currentStyle.fontSize;
+            icon.style.color = currentStyle.color;
+            icon.dataset.cbPriority = String(priorityOf('custom', Math.min(9, slot.index)));
+            icon.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                window.CopyBotActions?.run(slot.action);
+            });
+            const position = iconsByPosition[slot.position] ? slot.position : 'bottom_left';
+            iconsByPosition[position].push(icon);
         });
 
         // === 퀵메뉴 입력필드 아이콘 추가 ===
@@ -227,7 +274,7 @@
             const currentStyle = window.getComputedStyle(referenceIcon);
             quickMenuIcon.style.fontSize = currentStyle.fontSize;
             quickMenuIcon.style.color = currentStyle.color;
-            quickMenuIcon.style.order = '15'; // 실리 기본 아이콘 뒤, 복사봇 아이콘 중 첫번째
+            quickMenuIcon.dataset.cbPriority = String(priorityOf('quickmenu'));
             
             quickMenuIcon.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -242,6 +289,8 @@
         for (const position in iconsByPosition) {
             const iconsToAdd = iconsByPosition[position];
             if (iconsToAdd.length === 0) continue;
+            // 유저 우선순위대로 정렬 (DOM 삽입 순서 = 표시 순서; 좌하단은 flex order 로도 고정)
+            iconsToAdd.sort((a, b) => Number(a.dataset.cbPriority || 0) - Number(b.dataset.cbPriority || 0));
 
             switch(position) {
                 case 'bottom_left':
@@ -249,11 +298,12 @@
                 case 'right':
                     iconsToAdd.forEach(icon => icon.classList.add('interactable'));
                     if (position === 'bottom_left' && leftSendForm) {
+                        leftSendForm.dataset.copybotLayout = '1';
                         Array.from(leftSendForm.children).forEach(child => { child.style.order = '10'; });
                         const originalWidth = leftSendForm.getBoundingClientRect().width;
                         if (originalWidth > 0) leftSendForm.style.maxWidth = `${originalWidth}px`;
                         leftSendForm.style.flexWrap = 'wrap';
-                        iconsToAdd.forEach(icon => leftSendForm.appendChild(icon));
+                        iconsToAdd.forEach(icon => { icon.style.order = String(11 + Number(icon.dataset.cbPriority || 0)); leftSendForm.appendChild(icon); });
                     } else if (position === 'left' && leftSendForm) {
                         iconsToAdd.forEach(icon => { icon.style.order = ''; leftSendForm.appendChild(icon); });
                     } else if (position === 'right' && rightSendForm) {
@@ -295,6 +345,7 @@
                     break;
             }
         }
+        window.copybot_refreshThemeWatch?.();
         debugLog('아이콘 업데이트 완료');
     } catch (error) {
         console.error('깡갤 복사기: 입력 필드 아이콘 업데이트 실패', error);
@@ -305,7 +356,11 @@
 		safeUpdateInputFieldIcons: async function() {
 			try {
 				debugLog('안전한 아이콘 업데이트 시작...');
-				
+				// 보여줄 아이콘도, 지울 아이콘도 없으면 DOM 안정화 대기(타이머)조차 돌리지 않음
+				if (!document.querySelector('.copybot_input_field_icon, .copybot_independent_container') && !this.anyIconConfigured()) {
+					return;
+				}
+
 				// DOM이 안정화될 때까지 기다림
 				const isStabilized = await this.waitForLayoutStabilization();
 				
@@ -325,6 +380,10 @@
         // 강화된 다중 시점 아이콘 업데이트 스케줄러 (index.js에서 이동)
 		scheduleIconUpdates: function() {
 			const self = this;
+			if (!self.anyIconConfigured()) {
+				debugLog('입력창 아이콘 설정 없음 — 업데이트 스케줄 생략');
+				return;
+			}
 			debugLog('다중 시점 아이콘 업데이트 스케줄링 시작');
 			
 			// 첫 번째 시도: 즉시 시도 (DOM이 이미 준비되어 있을 수 있음)
@@ -346,7 +405,7 @@
 				if (self.isInputFieldReady()) {
 					self.updateInputFieldIcons();
 				} else {
-					console.warn('깡갤 복사기: 최종 백업 시도에서도 DOM이 준비되지 않음');
+					debugLog('최종 백업 시도에서도 DOM이 준비되지 않음');
 				}
 			}, 10000);
 		}

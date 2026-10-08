@@ -70,9 +70,12 @@
                 hqProfileObserver.disconnect();
                 hqProfileObserver = null;
             }
-            
-            // 페이지 새로고침으로 원래 썸네일 복원
-            // location.reload();
+            // jQuery attr 패치도 되돌림 (옵션 OFF 면 실리·다른 확장에 아무 영향도 남기지 않음)
+            if (window.jQuery && window.jQuery._copybot_patched && window.jQuery._copybot_origAttr) {
+                window.jQuery.fn.attr = window.jQuery._copybot_origAttr;
+                window.jQuery._copybot_patched = false;
+                window.jQuery._copybot_origAttr = null;
+            }
         },
 
         // 기존 이미지 처리
@@ -384,6 +387,7 @@
                 };
                 
                 window.jQuery._copybot_patched = true;
+                window.jQuery._copybot_origAttr = originalAttr;
                 debugLog('[팝업 URL 모니터링 시스템 활성화]');
             }
         }
