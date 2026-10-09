@@ -605,16 +605,16 @@
                                 <div class="copybot_settings_sub_row copybot_convenience_row" style="margin-top: 6px;">
                                     <span class="copybot_convenience_label">캐시 우회:</span>
                                     <select id="copybot_regen_cache_mode" class="text_pole copybot_convenience_select">
-                                        <option value="off" selected>끄기</option>
+                                        <option value="off" selected>기본(끄기)</option>
                                         <option value="light">약하게</option>
                                         <option value="strong">강하게</option>
                                     </select>
                                 </div>
                                 <div class="copybot_description" style="margin-top: 6px; font-size: 11px; color: #666; line-height: 1.5;">
-                                    재생성할 때 프롬프트에 보이지 않는 1회용 표식을 넣어 AI 서버의 프롬프트 캐시를 비켜갑니다. 같은 답만 반복될 때 써 보면 됩니다.<br>
-                                    <strong>약하게</strong>: 마지막 유저 메시지 끝에만 표식 → 앞부분 캐시는 유지(비용 거의 그대로).<br>
-                                    <strong>강하게</strong>: 프롬프트 맨 앞에 표식 → 캐시 전부 무효(비용↑, 고착 탈출엔 가장 확실).<br>
-                                    표식은 요청 직후 자동으로 지워져 채팅 기록에는 남지 않습니다.
+                                    재생성할 때 AI 서버의 프롬프트 캐시를 비켜가서 같은 답이 반복되는 것을 줄입니다.<br>
+                                    <strong>기본(끄기)</strong>: 캐시 우회를 하지 않습니다.<br>
+                                    <strong>약하게</strong>: 캐시 비용은 대부분 유지됩니다. 효과는 보통입니다.<br>
+                                    <strong>강하게</strong>: 캐시 비용 절감이 없어집니다(비용↑). 효과는 가장 확실합니다.
                                 </div>
                                 <div class="copybot_settings_sub_row copybot_convenience_row" style="margin-top: 10px;">
                                     <span class="copybot_convenience_label">끈질기게 재시도</span>
