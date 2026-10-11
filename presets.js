@@ -6,7 +6,6 @@
 
     // 전역 변수 관리
     let isPresetEditMode = false;
-    let draggedItem = null;
 
     // 전역 네임스페이스 생성
     window.CopyBotPresets = {
@@ -47,7 +46,9 @@
             const json = JSON.stringify(settings);
             let prev = null;
             try { prev = localStorage.getItem('copybot_settings'); } catch (e) { /* 무시 */ }
-            if (prev && prev !== json) localStorage.setItem('copybot_settings_backup', prev);
+            // 이전 본 키가 깨진 문자열이면 좋은 백업을 그걸로 덮지 않는다 (settings.js 와 동일 규칙)
+            const prevOk = !!prev && (window.CopyBotSettings?._isJsonObject ? window.CopyBotSettings._isJsonObject(prev) : true);
+            if (prev && prev !== json && prevOk) localStorage.setItem('copybot_settings_backup', prev);
             localStorage.setItem('copybot_settings', json);
             sessionStorage.setItem('copybot_settings_temp', json);
             window.CopyBotSettings?.writeServerCopy?.(json);   // 실리 계정에도 같은 내용
@@ -243,55 +244,31 @@
                         settings.ghostwrite.profile = activePreset.profile || 'default';
                     }
                     
-                    // 새로운 통합 시스템에 저장 (강화된 다중 백업)
+                    // 새로운 통합 시스템에 저장 — 설정 쓰기 통로(_writeSettings: 백업=이전 저장본, _savedAt, 실리 계정 사본, 차단 플래그)만 사용
+                    let written = false;
                     try {
-                        localStorage.setItem('copybot_settings', JSON.stringify(settings));
-                        localStorage.setItem('copybot_settings_backup', JSON.stringify(settings));
-                        sessionStorage.setItem('copybot_settings_temp', JSON.stringify(settings));
-                        this.debugLog('마이그레이션: 다중 백업 저장 성공');
+                        written = this._writeSettings(settings);
+                        this.debugLog('마이그레이션: 저장', written ? '성공' : '생략');
                     } catch (storageError) {
                         console.error('마이그레이션: 저장 실패', storageError);
-                        // 최소한 메인 설정이라도 저장 시도
-                        try {
-                            localStorage.setItem('copybot_settings', JSON.stringify(settings));
-                        } catch (fallbackError) {
-                            console.error('마이그레이션: 메인 설정 저장마저 실패', fallbackError);
-                        }
                     }
-                    
+
                     this.debugLog('마이그레이션 완료:', migratedPresets.length, '개 프리셋');
-                    
-                    // 3. 기존 데이터 정리 (1초 후 - 안전을 위해 지연)
-                    setTimeout(() => {
-                        localStorage.removeItem('copybot_presets');
-                        localStorage.removeItem('copybot_active_preset');
-                        this.debugLog('기존 프리셋 데이터 정리 완료');
-                    }, 1000);
-                    
-                } else {
-                    this.debugLog('기존 프리셋 데이터 없음, 초기 설정 생성');
-                    
-                    // 초기 설정 생성
-                    let settings = currentSettings ? JSON.parse(currentSettings) : {};
-                    
-                    if (!settings.ghostwrite) {
-                        settings.ghostwrite = {
-                            enabled: false,
-                            text: '',
-                            excludeText: '',
-                            position: 'right',
-                            useTempField: false,
-                            profile: 'default',
-                            presets: [{ name: '기본 프리셋', prompt: '', excludePrompt: '', profile: 'default' }],
-                            activePreset: '기본 프리셋'
-                        };
-                        
-                        // 초기 설정도 다중 백업으로 생성
-                        localStorage.setItem('copybot_settings', JSON.stringify(settings));
-                        localStorage.setItem('copybot_settings_backup', JSON.stringify(settings));
-                        sessionStorage.setItem('copybot_settings_temp', JSON.stringify(settings));
-                        this.debugLog('초기 프리셋 설정 생성 완료 (다중 백업)');
+
+                    // 3. 기존 데이터 정리 (새 저장이 실제로 됐을 때만, 1초 후 - 안전을 위해 지연)
+                    if (written) {
+                        setTimeout(() => {
+                            localStorage.removeItem('copybot_presets');
+                            localStorage.removeItem('copybot_active_preset');
+                            this.debugLog('기존 프리셋 데이터 정리 완료');
+                        }, 1000);
                     }
+
+                } else {
+                    // 기존 프리셋 데이터 없음 → 아무것도 쓰지 않는다. (예전엔 여기서 타임스탬프 없는 초기 설정을 본 키에 만들어 두었는데,
+                    // 그러면 새 기기에서 실리 계정 사본이 "더 오래된 것"으로 밀려 무시되고 첫 저장 때 서버 사본까지 기본값으로 덮였다 — 2026-10-11)
+                    // 기본 프리셋은 getPresets() 가 저장 없이 돌려주므로 초기 저장이 필요 없다.
+                    this.debugLog('기존 프리셋 데이터 없음, 마이그레이션 없음');
                 }
                 
             } catch (error) {
@@ -300,6 +277,18 @@
         },
 
         // === 프리셋 CRUD ===
+
+        // 자동저장의 "마지막 저장값"을 방금 불러온 값으로 맞춘다 (문자열인 칸만).
+        // ghostwrite.js 는 원본 그대로 두므로(2026-10-11 유저 결정) 그 모듈의 기록 객체에 값만 적는다. 수정안의 markSaved 가 있으면 그쪽을 쓴다.
+        _markSaved: function(values) {
+            const gw = window.CopyBotGhostwrite;
+            if (!gw || !values) return;
+            if (typeof gw.markSaved === 'function') { gw.markSaved(values); return; }
+            if (!gw._lastSavedValues || typeof gw._lastSavedValues !== 'object') return;
+            for (const key of ['basicPrompt', 'excludePrompt', 'profile']) {
+                if (typeof values[key] === 'string') gw._lastSavedValues[key] = values[key];
+            }
+        },
 
         // 프리셋 로드 (통합된 시스템용)
         loadPreset: function(presetName) {
@@ -314,20 +303,21 @@
                 // 프롬프트 텍스트 로드
                 if (preset.prompt !== undefined) $('#copybot_ghostwrite_textbox').val(preset.prompt);
                 if (preset.excludePrompt !== undefined) $('#copybot_ghostwrite_exclude_textbox').val(preset.excludePrompt);
-                
-                // 마지막 저장값 업데이트 (하이브리드 자동저장용)
-                if (window.lastSavedValues) {
-                    window.lastSavedValues.basicPrompt = preset.prompt || '';
-                    window.lastSavedValues.excludePrompt = preset.excludePrompt || '';
-                    window.lastSavedValues.profile = preset.profile || 'default';
-                }
-                
+
+                // 마지막 저장값 업데이트 (하이브리드 자동저장용) — 방금 불러온 값이 곧 저장된 값이다.
+                // (예전엔 존재하지 않는 window.lastSavedValues 에 써서 아무 일도 안 했다 → 이전 프리셋의 값이 "마지막 저장값"으로 남았음)
+                // 값을 건드리지 않은 칸(undefined)은 넘기지 않는다.
+                this._markSaved({
+                    basicPrompt: preset.prompt !== undefined ? String(preset.prompt ?? '') : undefined,
+                    excludePrompt: preset.excludePrompt !== undefined ? String(preset.excludePrompt ?? '') : undefined,
+                });
+
                 // 프로필 설정 로드
                 setTimeout(() => {
                     const profileSelect = $('#copybot_ghostwrite_profile_select');
                     const targetProfile = preset.profile || 'default';
-                    
-                    if (profileSelect.find(`option[value="${targetProfile}"]`).length > 0) {
+
+                    if (this._isProfileListed(targetProfile)) {
                         profileSelect.val(targetProfile);
                     } else {
                         profileSelect.val('default');
@@ -335,9 +325,7 @@
                             this.debugLog('저장된 프로필을 찾을 수 없어 기본값으로 설정:', targetProfile);
                         }
                     }
-                    if (window.lastSavedValues) {
-                        window.lastSavedValues.profile = profileSelect.val() || 'default';
-                    }
+                    this._markSaved({ profile: profileSelect.val() || 'default' });
                 }, 150);
                 
                 this.debugLog('✅ 통합 시스템에서 프리셋 로드 완료:', presetName);
@@ -346,11 +334,17 @@
             }
         },
 
-        // 현재 프리셋 저장 (자동저장 연계)
+        // 대필 프로필 드롭다운에 그 프로필이 지금 있는가 (값 그대로 비교 — 선택자 문자열에 끼워 넣지 않는다)
+        _isProfileListed: function(profileId) {
+            const select = document.getElementById('copybot_ghostwrite_profile_select');
+            return !!select && Array.from(select.options || []).some(option => option.value === profileId);
+        },
+
+        // 현재 프리셋 저장 (자동저장 연계). 저장소에 실제로 썼으면 true, 못 썼으면 false
         saveCurrentPreset: function(isAutoSave = false) {
             const selectedName = $('#copybot_preset_select').val();
             let presets = this.getPresets();
-            
+
             // 현재 입력된 값들 가져오기
             const currentPrompt = $('#copybot_ghostwrite_textbox').val() || '';
             const currentExcludePrompt = $('#copybot_ghostwrite_exclude_textbox').val() || '';
@@ -360,41 +354,56 @@
                 // 시나리오 1: 프리셋이 선택되어 있을 때 (업데이트)
                 const presetToUpdate = presets.find(p => p.name === selectedName);
                 if (presetToUpdate) {
+                    // 프로필 목록이 아직 안 떴거나 지금은 없는 프로필이라 화면이 '기본'으로 내려앉아 있을 뿐이면, 저장돼 있던 전용 프로필을 지우지 않는다
+                    // (지시문만 고쳤는데 프리셋의 전용 프로필 설정까지 사라지던 것 방지. 목록에 있는 프로필에서 '기본'으로 직접 바꾼 것은 그대로 저장된다)
+                    const storedProfile = presetToUpdate.profile || 'default';
+                    const profileToSave = (currentProfile === 'default' && storedProfile !== 'default' && !this._isProfileListed(storedProfile))
+                        ? storedProfile : currentProfile;
+
                     // 프리셋 데이터 업데이트
                     presetToUpdate.prompt = currentPrompt;
                     presetToUpdate.excludePrompt = currentExcludePrompt;
-                    presetToUpdate.profile = currentProfile;
-                    
-                    // 전역 변수 및 UI 상태 동기화
+                    presetToUpdate.profile = profileToSave;
+
+                    // 기본 프리셋이 항상 첫 번째 (savePresets 와 같은 규칙)
+                    const defaultPresetIndex = presets.findIndex(p => p.name === '기본 프리셋');
+                    if (defaultPresetIndex > 0) presets.unshift(presets.splice(defaultPresetIndex, 1)[0]);
+
+                    // 전역 변수 동기화
                     window.copybotIntegratedPresets = presets;
-                    
-                    // UI의 현재 값들도 업데이트된 프리셋과 동기화
-                    const settings = JSON.parse(localStorage.getItem('copybot_settings') || '{}');
-                    if (!settings.ghostwrite) settings.ghostwrite = {};
-                    
-                    settings.ghostwrite.text = currentPrompt;
-                    settings.ghostwrite.excludeText = currentExcludePrompt;
-                    settings.ghostwrite.profile = currentProfile;
+                    window.copybotActivePreset = selectedName;
 
-                    this._writeSettings(settings);
+                    // 현재 지시문·활성 프리셋·프리셋 목록을 한 번에 쓴다.
+                    // (예전엔 같은 저장본을 세 번 연달아 읽고 썼다 → 자동저장 한 번에 저장소 쓰기 3번, 백업 키는 "이전 저장본"이 아니라 방금 쓴 중간 상태로 덮였음)
+                    let written = false;
+                    try {
+                        const settings = JSON.parse(localStorage.getItem('copybot_settings') || '{}');
+                        if (!settings.ghostwrite) settings.ghostwrite = {};
+                        settings.ghostwrite.text = currentPrompt;
+                        settings.ghostwrite.excludeText = currentExcludePrompt;
+                        settings.ghostwrite.profile = profileToSave;
+                        settings.ghostwrite.activePreset = selectedName;
+                        settings.ghostwrite.presets = presets;
+                        written = this._writeSettings(settings) === true;
+                    } catch (e) {
+                        console.error('프리셋 저장 실패:', e);
+                    }
 
-                    this.setActivePreset(selectedName);
-                    
-                    // 자동저장일 때는 토스트 메시지 생략, 하지만 저장 로직은 동일하게 실행
+                    // 자동저장일 때는 토스트 메시지 생략
                     if (!isAutoSave) {
                         if (window.toastr) {
-                            toastr.success(`'${this.escapeHtml(selectedName)}' 프리셋이 업데이트되고 현재 프리셋으로 설정되었습니다.`);
+                            if (written) toastr.success(`'${selectedName}' 프리셋이 업데이트되고 현재 프리셋으로 설정되었습니다.`, '', { escapeHtml: true });
+                            else toastr.error('프리셋을 저장하지 못했습니다.');
                         }
                     } else {
-                        this.debugLog(`'${selectedName}' 프리셋 자동저장 완료`);
+                        this.debugLog(`'${selectedName}' 프리셋 자동저장 ${written ? '완료' : '안 됨'}`);
                     }
-                    
-                    // 실제 저장 실행 (자동저장이든 수동저장이든 무조건 실행)
-                    this.savePresets(presets);
+                    return written;
                 } else {
                     if (!isAutoSave && window.toastr) {
-                        toastr.error(`'${this.escapeHtml(selectedName)}' 프리셋을 찾지 못해 업데이트에 실패했습니다.`);
+                        toastr.error(`'${selectedName}' 프리셋을 찾지 못해 업데이트에 실패했습니다.`, '', { escapeHtml: true });
                     }
+                    return false;
                 }
             } else {
                 // 시나리오 2: 드롭다운에서 빈 값("")이 선택된 경우
@@ -405,10 +414,10 @@
                     defaultPreset.prompt = $('#copybot_ghostwrite_textbox').val();
                     defaultPreset.excludePrompt = $('#copybot_ghostwrite_exclude_textbox').val();
                     defaultPreset.profile = $('#copybot_ghostwrite_profile_select').val() || 'default';
-                    this.savePresets(presets);
+                    const written = this.savePresets(presets) === true;
                     // 기본 프리셋도 활성 프리셋으로 설정
                     this.setActivePreset('기본 프리셋');
-                    
+
                     if (!isAutoSave) {
                         if (window.toastr) {
                             toastr.success('기본 프리셋이 업데이트되고 현재 프리셋으로 설정되었습니다.');
@@ -420,6 +429,7 @@
                     } else {
                         this.debugLog('기본 프리셋 자동저장 완료');
                     }
+                    return written;
                 } else {
                     // 예외 상황: 새 프리셋 생성 프로세스 유지 (자동저장에서는 실행하지 않음)
                     if (!isAutoSave) {
@@ -449,10 +459,12 @@
                             this.setActivePreset(name);
                             if (window.toastr) toastr.success(`'${name}' 프리셋이 새로 저장되고 현재 프리셋으로 설정되었습니다.`);
                         }
-                        this.savePresets(presets);
+                        const written = this.savePresets(presets) === true;
                         if (this.updatePresetDropdown) this.updatePresetDropdown();
                         $('#copybot_preset_select').val(name);
+                        return written;
                     }
+                    return false;   // 자동저장인데 저장할 프리셋을 정할 수 없음 → 아무것도 쓰지 않음
                 }
             }
         },
@@ -468,6 +480,10 @@
             }
             presets.push({ name: newName, prompt: "", excludePrompt: "", profile: "default" });
             this.savePresets(presets);
+            // 새 프리셋을 곧바로 "지금 쓰는(활성) 프리셋"으로 삼는다 (프리셋 복사와 같은 규칙).
+            // 안 그러면 바로 이어지는 이름 편집을 취소(✕)했을 때 드롭다운만 이전 프리셋으로 돌아가고 지시문 칸은 새 프리셋(빈칸)인 채라,
+            // 그 칸을 눌렀다 떼기만 해도 이전 프리셋의 지시문이 빈 값으로 덮였다.
+            this.setActivePreset(newName);
             if (this.updatePresetDropdown) this.updatePresetDropdown();
             $('#copybot_preset_select').val(newName);
             this.loadPreset(newName);
@@ -483,27 +499,49 @@
             }
             
             let presets = this.getPresets();
+            // 지우는 프리셋은 곧 "지금 쓰던(활성) 프리셋"이다 → 저장본의 활성 프리셋·현재 지시문도 기본 프리셋 것으로 함께 옮긴다.
+            // (예전엔 목록에서만 빼서, 새로고침하면 지운 프리셋의 지시문이 '기본 프리셋' 칸에 그대로 떠 있었고 한 글자만 고쳐도 기본 프리셋을 덮어썼다)
+            // 드롭다운을 먼저 기본 프리셋으로 돌려 두면 savePresets 가 현재 지시문을 기본 프리셋 것으로 맞춰 쓴다.
+            $('#copybot_preset_select').val('기본 프리셋');
             this.savePresets(presets.filter(p => p.name !== nameToDelete));
+            this.setActivePreset('기본 프리셋');
             this.loadPreset('기본 프리셋'); // 삭제 후 기본 프리셋으로 이동
             return true;
         },
 
         // 프리셋 이름 변경
         renamePreset: function(oldName, newName) {
+            oldName = String(oldName ?? '');
+            newName = String(newName ?? '').trim();
+            if (!newName) {
+                if (window.toastr) toastr.error('프리셋 이름은 비워둘 수 없습니다.');
+                return false;
+            }
+            if (oldName === '기본 프리셋') {
+                if (window.toastr) toastr.warning('기본 프리셋의 이름은 변경할 수 없습니다.');
+                return false;
+            }
+            // 드롭다운의 관리 메뉴 값과 같은 이름이면 그 프리셋을 고를 때마다 "추가/순서 변경/복사"가 실행돼 다시는 고를 수 없게 된다
+            if (/^__(add|reorder|copy)__$/.test(newName)) {
+                if (window.toastr) toastr.error('그 이름은 프리셋 관리 메뉴가 쓰고 있어 사용할 수 없습니다.');
+                return false;
+            }
             let presets = this.getPresets();
-            if (presets.some(p => p.name.toLowerCase() === newName.toLowerCase() && p.name.toLowerCase() !== oldName.toLowerCase())) {
-                if (window.toastr) toastr.error(`'${newName}' 이름은 이미 사용 중입니다.`);
+            if (presets.some(p => String(p.name).toLowerCase() === newName.toLowerCase() && String(p.name).toLowerCase() !== oldName.toLowerCase())) {
+                if (window.toastr) toastr.error(`'${newName}' 이름은 이미 사용 중입니다.`, '', { escapeHtml: true });
                 return false;
             }
             const preset = presets.find(p => p.name === oldName);
             if (preset) {
+                // 이름을 바꾸기 전에 확인해야 한다 (바꾼 뒤엔 옛 이름의 프리셋이 없어 항상 "활성 아님"으로 나왔음)
+                const wasActive = this.getActivePreset() === oldName;
                 preset.name = newName;
                 
                 // 🔥 핵심 수정 1: 드롭다운 값도 즉시 변경 (savePresets에서 올바른 값을 읽도록)
                 $('#copybot_preset_select').val(newName);
                 
                 // 🔥 핵심 수정 2: 활성 프리셋이 변경된 프리셋이면 활성 프리셋 이름도 업데이트
-                if (this.getActivePreset() === oldName) {
+                if (wasActive) {
                     this.setActivePreset(newName);
                 }
                 
@@ -538,7 +576,7 @@
                 };
                 presets.push(newPreset);
                 this.savePresets(presets);
-                if (window.toastr) toastr.success(`현재 입력 내용이 '${this.escapeHtml(newName)}'(으)로 저장되었습니다.`);
+                if (window.toastr) toastr.success(`현재 입력 내용이 '${newName}'(으)로 저장되었습니다.`, '', { escapeHtml: true });
                 if (this.updatePresetDropdown) this.updatePresetDropdown();
                 // 드롭다운 값을 변경하고 change 이벤트를 강제로 발생시킵니다.
                 $('#copybot_preset_select').val(newName).trigger('change');
@@ -572,7 +610,7 @@
             presets.push(newPreset);
             this.savePresets(presets);
             
-            if (window.toastr) toastr.success(`'${this.escapeHtml(newName)}'(으)로 복사되었습니다.`);
+            if (window.toastr) toastr.success(`'${newName}'(으)로 복사되었습니다.`, '', { escapeHtml: true });
             if (this.updatePresetDropdown) this.updatePresetDropdown();
             
             // 새로 생성된 프리셋을 선택하고, 앱의 내부 상태를 갱신하기 위해 change 이벤트를 강제로 발생시킴
@@ -685,10 +723,8 @@
                 settings.ghostwrite.activePreset = presetName;
 
                 this._writeSettings(settings);
+                // (구버전 키 copybot_active_preset 은 더 쓰지 않는다 — 마이그레이션이 지우는 키를 여기서 되살리던 자기모순 제거, 2026-10-11)
 
-                // 레거시 지원 (하위 호환성)
-                localStorage.setItem('copybot_active_preset', presetName);
-                
                 this.debugLog('활성 프리셋 설정 (통합, 다중 백업):', presetName);
             } catch (error) {
                 console.error('활성 프리셋 저장 실패:', error);
@@ -710,8 +746,9 @@
             select.empty();
             
             // 기본 프리셋을 실제 프리셋 배열에서 가져와서 표시
+            // text 는 글자 그대로 들어간다(HTML 로 해석되지 않음) → 미리 이스케이프하면 "A&B" 가 "A&amp;B" 로 보인다
             presets.forEach(preset => {
-                select.append($('<option>', { value: preset.name, text: this.escapeHtml(preset.name) }));
+                select.append($('<option>', { value: preset.name, text: preset.name }));
             });
 
             // 2. 관리 메뉴를 항상 추가합니다.
@@ -755,7 +792,7 @@
         enterPresetEditMode: function() {
             isPresetEditMode = true;
             const selectedPresetName = $('#copybot_preset_select').val();
-            $('#copybot_preset_save, #copybot_preset_edit').hide();
+            $('#copybot_preset_edit').hide();
             $('#copybot_preset_confirm, #copybot_preset_cancel').show();
             
             // 기본 프리셋이 아닐 때만 삭제 버튼 표시
@@ -779,7 +816,7 @@
         exitPresetEditMode: function(forceUpdate = false) {
             if (!isPresetEditMode && !forceUpdate) return;
             isPresetEditMode = false;
-            $('#copybot_preset_save, #copybot_preset_edit').show();
+            $('#copybot_preset_edit').show();
             $('#copybot_preset_confirm, #copybot_preset_delete, #copybot_preset_cancel').hide();
             $('#copybot_preset_rename_input').hide();
             $('#copybot_preset_select').show();
@@ -810,8 +847,16 @@
         reorderPresets: function(newOrderNameArray) {
             const presets = this.getPresets();
             const defaultPreset = presets.find(p => p.name === '기본 프리셋');
-            const reorderedPresets = newOrderNameArray.map(name => presets.find(p => p.name === name)).filter(Boolean);
-            
+            // 순서만 바꾼다 — 넘어온 이름 목록에 없는 프리셋(목록이 비어 왔거나, 이름이 같은 프리셋이 둘인 옛 저장본 등)도 지우지 않고 원래 순서대로 뒤에 둔다
+            const others = presets.filter(p => p !== defaultPreset);
+            const picked = new Set();
+            const reorderedPresets = [];
+            (Array.isArray(newOrderNameArray) ? newOrderNameArray : []).forEach(name => {
+                const preset = others.find(p => p.name === name && !picked.has(p));
+                if (preset) { picked.add(preset); reorderedPresets.push(preset); }
+            });
+            others.forEach(p => { if (!picked.has(p)) reorderedPresets.push(p); });
+
             // 기본 프리셋을 맨 앞에 추가하고 나머지 재정렬된 프리셋들을 뒤에 붙임
             const finalPresets = defaultPreset ? [defaultPreset, ...reorderedPresets] : reorderedPresets;
             this.savePresets(finalPresets);
@@ -877,11 +922,6 @@
         // 편집 모드 상태 조회
         isEditMode: function() {
             return isPresetEditMode;
-        },
-
-        // 편집 모드 상태 설정 (내부용)
-        setEditMode: function(mode) {
-            isPresetEditMode = mode;
         }
     };
 

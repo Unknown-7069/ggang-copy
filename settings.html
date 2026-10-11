@@ -18,12 +18,12 @@
                 <div class="copybot_section">
                     <div class="copybot_input_row">
                         <div class="copybot_input_group">
-                            <label for="copybot_start">시작위치:</label>
+                            <label for="copybot_start">시작 위치:</label>
                             <input type="number" id="copybot_start" placeholder="0" min="0" class="text_pole">
                         </div>
                         
                         <div class="copybot_input_group">
-                            <label for="copybot_end">종료위치:</label>
+                            <label for="copybot_end">종료 위치:</label>
                             <input type="number" id="copybot_end" placeholder="10" min="0" class="text_pole">
                         </div>
                         
@@ -33,10 +33,12 @@
                     </div>
                     
                     <div class="copybot_settings_sub_row copybot_convenience_row" style="margin-top: 6px;">
-                        <input type="checkbox" id="copybot_copy_include_hidden" class="copybot_checkbox">
-                        <span class="copybot_convenience_label">숨긴 메시지 포함</span>
+                        <label class="copybot_check_label">
+                            <input type="checkbox" id="copybot_copy_include_hidden" class="copybot_checkbox">
+                            <span class="copybot_convenience_label">숨긴 메시지 포함</span>
+                        </label>
                     </div>
-                    <small>메세지 범위 입력 후 범위 복사 버튼을 클릭하면 클립보드에 자동 복사&아래 텍스트박스에 해당 내용이 삽입됩니다. 미입력시 자동으로 첫번째 메세지/마지막 메세지로 설정됩니다.</small>
+                    <small>메시지 범위 입력 후 범위 복사 버튼을 클릭하면 클립보드에 자동 복사&아래 텍스트박스에 해당 내용이 삽입됩니다. 미입력시 자동으로 첫번째 메시지/마지막 메시지로 설정됩니다.</small>
                 </div>
 
                 <!-- 결과 섹션 -->
@@ -71,11 +73,11 @@
                 <div class="copybot_section">
                     <div class="copybot_input_row">
                         <div class="copybot_input_group">
-                            <label for="copybot_capture_start">시작위치:</label>
+                            <label for="copybot_capture_start">시작 위치:</label>
                             <input type="number" id="copybot_capture_start" placeholder="0" min="0" class="text_pole copybot_capture_num">
                         </div>
                         <div class="copybot_input_group">
-                            <label for="copybot_capture_end">종료위치:</label>
+                            <label for="copybot_capture_end">종료 위치:</label>
                             <input type="number" id="copybot_capture_end" placeholder="10" min="0" class="text_pole copybot_capture_num">
                         </div>
                         <button id="copybot_capture_execute" class="menu_button" title="지정한 범위의 메시지를 보이는 그대로 미리보기로 띄움 (거기서 복사/저장)">
@@ -230,7 +232,7 @@
                                 </select>
                             </div>
                             <div class="copybot_description" style="margin-top: 6px; font-size:12px; color: #666; line-height: 1.5;">
-                                '한 장으로'도 너무 길어지면(약 12,000픽셀) 자동으로 여러 장에 나눠 담습니다. 메시지 20개 이상이거나 예상 크기가 크면 캡처 전에 한 번 물어봅니다.
+                                '한 장으로'도 너무 길어지면(약 12,000픽셀) 자동으로 여러 장에 나눠 담습니다. 메시지가 20개를 넘거나 예상 크기가 크면 캡처 전에 한 번 물어봅니다.
                             </div>
                         </div>
                     </div>
@@ -259,7 +261,7 @@
                         <div class="copybot_rule_group_title">캡처에 넣을 요소 <small>— 체크 = 넣음, 바로 반영</small></div>
                         <div class="copybot_capture_kinds"></div>
                         <div class="copybot_description" style="margin-top: 4px; font-size: 11px; line-height: 1.5; opacity: 0.8;">
-                            공통 항목(상태창·이미지·선택지·표 등)은 모든 봇에, 봇별 블록은 이 캐릭터에만 저장됩니다. 미리보기에서 요소를 꾹 눌러 빼도 같은 설정이 바뀌며, 상단 ↶ ↷ 로 되돌릴 수 있습니다.
+                            체크를 끄면 이번 미리보기에서만 빠지고 설정은 바뀌지 않습니다. 압정을 켜면 이 봇에서 항상 빠집니다. 모든 봇에 적용되는 설정은 캡처 옵션에서 바꿉니다. 미리보기에서 요소를 꾹 누르면 하나만 빼거나 항상 빼도록 고정할 수 있고, 상단 ↶ ↷ 로 되돌릴 수 있습니다.
                         </div>
                     </div>
                     <div class="copybot_capture_overlay_body"><div class="copybot_capture_frame_holder"></div></div>
@@ -294,8 +296,8 @@
                             <button id="copybot_open_settings_button" class="copybot_settings_button" title="편의기능 옵션">
                                 편의기능
                             </button>
-                            <button id="copybot_open_message_operations_button" class="copybot_settings_button" title="메세지 정리 옵션">
-                                메세지 정리
+                            <button id="copybot_open_message_operations_button" class="copybot_settings_button" title="메시지 정리 옵션">
+                                메시지 정리
                             </button>
                             <button id="copybot_open_quickmenu_button" class="copybot_settings_button" title="퀵메뉴 옵션">
 								퀵메뉴
@@ -310,7 +312,7 @@
                         <!-- '확장 내부' 아이콘 줄: 메뉴줄이 꽉 차서 아이콘은 그 아래 별도 줄에 (아이콘 없으면 숨김) -->
                         <div id="copybot_submenu_icons" class="copybot_submenu_icons" style="display: none;">
                             <span id="copybot_submenu_tag_remove" class="copybot_submenu_icon fa-solid fa-tags" title="태그 제거" style="display: none;"></span>
-                            <span id="copybot_submenu_delete" class="copybot_submenu_icon fa-solid fa-trash" title="마지막 메세지 삭제" style="display: none;"></span>
+                            <span id="copybot_submenu_delete" class="copybot_submenu_icon fa-solid fa-trash" title="마지막 메시지 삭제" style="display: none;"></span>
                             <span id="copybot_submenu_regenerate" class="copybot_submenu_icon fa-solid fa-redo" title="삭제 후 재생성" style="display: none;"></span>
                         </div>
                     </div>
@@ -336,7 +338,7 @@
 								<!-- 드롭다운과 이름 변경 입력창을 감싸는 래퍼 -->
 								<div id="copybot_preset_name_wrapper" style="flex-grow: 1; position: relative;">
 									<select id="copybot_preset_select" class="text_pole" style="width: 100%;">
-										<option value="">기본 프리셋</option>
+										<option value="기본 프리셋">기본 프리셋</option>
 										<!-- 자바스크립트로 프리셋 목록이 여기에 추가됩니다 -->
 									</select>
 									<input type="text" id="copybot_preset_rename_input" class="text_pole" style="width: 100%; display: none;" placeholder="프리셋 이름 입력..."/>
@@ -391,15 +393,15 @@
                                 </div>
                                 
                                 <!-- 프리셋 통합 설명문구 -->
-                                <div class="copybot_preset_description" style="margin-top: 16px; padding: 8px 12px; background: #f0f4f8; border-left: 3px solid #4299e1; border-radius: 4px; font-size: 12px; color: #2d3748; line-height: 1.4;">
-                                    위 3가지(기본 지시문 + 제외 지시문 + 프로필)이 모두 현재 선택된 프리셋에 함께 저장됩니다. 프리셋은 항상 마지막에 선택된 프리셋으로 유지됩니다.
+                                <div class="copybot_preset_description">
+                                    위 3가지(기본 지시문 + 제외 지시문 + 프로필)가 모두 현재 선택된 프리셋에 함께 저장됩니다. 프리셋은 항상 마지막에 선택된 프리셋으로 유지됩니다.
                                 </div>
 								
 								<!-- 프리셋 순서 변경 UI - 프롬프트 컨테이너 내부로 이동 -->
 								<div id="copybot_reorder_overlay" style="display: none;">
 									<div id="copybot_reorder_panel">
 										<h5>프리셋 순서 변경</h5>
-										<small>항목을 드래그하여 순서를 변경할 수 있습니다.</small>
+										<small>↑↓ 버튼으로 순서를 변경할 수 있습니다.</small>
 										<ul id="copybot_reorder_list">
 											<!-- JS로 프리셋 목록이 채워집니다 -->
 										</ul>
@@ -432,12 +434,12 @@
                                     </div>
                                     <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
                                         <input type="radio" id="copybot_ghostwrite_position_right" name="copybot_ghostwrite_position" value="right" class="copybot_radio" checked>
-                                        <label for="copybot_ghostwrite_position_right" class="copybot_settings_sub_label">기본(우측)</label>
+                                        <label for="copybot_ghostwrite_position_right" class="copybot_settings_sub_label">우측</label>
                                     </div>
                                 </div>
                             </div>
-                            <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666; display:none;">
-                                대필 아이콘(<i class="fa-solid fa-user-edit"></i>)을 누르면, 위에 써진 내용(프롬프트)와 채팅창에 적힌 대필 지시문의 내용을 조합하여 사용자를 대신해 봇이 글을 써줍니다. (비어있는 곳은 알아서 무시합니다)
+                            <div class="copybot_description copybot_ghostwrite_help" style="margin-top: 10px; font-size:12px; color: #666; display:none;">
+                                대필 아이콘(<i class="fa-solid fa-user-edit"></i>)을 누르면, 위에 적힌 내용(프롬프트)과 채팅창에 적힌 대필 지시문의 내용을 조합하여 사용자를 대신해 봇이 글을 써줍니다. (비어있는 곳은 알아서 무시합니다)
                             </div>
                         </div>
                         
@@ -449,14 +451,14 @@
                                 </button>
                             </div>
                             <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666;">
-                                체크하면 대필 전용칸이 생기고 기본 입력창 내용은 무시됩니다.<br>
-                                체크 해제시 기본 입력창에 쓴 내용을 대필 지시문으로 사용합니다.
+                                켜면 대필 전용칸이 생기고 기본 입력창 내용은 무시됩니다.<br>
+                                끄면 기본 입력창에 쓴 내용을 대필 지시문으로 사용합니다.
                             </div>
                         </div>
                         
 				</div>
 
-                    <!-- 메세지 정리 설정창 -->
+                    <!-- 메시지 정리 설정창 -->
                     <div id="copybot_message_operations_panel" class="copybot_settings_panel" style="display: none;">
                         
                         <!-- 메시지 숨기기/보이기 섹션 -->
@@ -498,7 +500,7 @@
                         <!-- 다중 메시지 삭제 섹션 -->
                         <div class="copybot_settings_item">
                             <div class="copybot_settings_main">
-                                <span class="copybot_settings_label">다중 메세지삭제</span>
+                                <span class="copybot_settings_label">다중 메시지 삭제</span>
                             </div>
                             <div class="copybot_input_row" style="margin-top: 8px; align-items: center;">
                                 <div class="copybot_input_group">
@@ -524,7 +526,7 @@
                         <div class="copybot_settings_item">
                             <div class="copybot_settings_main">
                                 <div class="copybot_label_with_icon">
-                                    <span class="copybot_settings_label">태그제거</span>
+                                    <span class="copybot_settings_label">태그 제거</span>
                                     <div class="fa-solid fa-tags copybot_icon_picker copybot_inline_icon_picker" id="copybot_tag_remove_icon_picker" data-default="fa-tags" data-icon="fa-tags" title="클릭하여 아이콘 변경"></div>
                                 </div>
                                 <button id="copybot_tag_remove_toggle" class="copybot_toggle_button" data-enabled="false">
@@ -533,12 +535,16 @@
                             </div>
                             <div id="copybot_tag_remove_options" class="copybot_settings_sub" style="display: none;">
                                 <div class="copybot_settings_sub_row copybot_convenience_row">
-                                    <input type="checkbox" id="copybot_tag_remove_submenu" class="copybot_checkbox">
-                                    <span class="copybot_convenience_label">확장 내부</span>
+                                    <label class="copybot_check_label">
+                                        <input type="checkbox" id="copybot_tag_remove_submenu" class="copybot_checkbox">
+                                        <span class="copybot_convenience_label">확장 내부</span>
+                                    </label>
                                 </div>
                                 <div class="copybot_settings_sub_row copybot_convenience_row">
-                                    <input type="checkbox" id="copybot_tag_remove_inputfield" class="copybot_checkbox">
-                                    <span class="copybot_convenience_label">입력필드:</span>
+                                    <label class="copybot_check_label">
+                                        <input type="checkbox" id="copybot_tag_remove_inputfield" class="copybot_checkbox">
+                                        <span class="copybot_convenience_label">입력필드:</span>
+                                    </label>
                                     <select id="copybot_tag_remove_position" class="text_pole copybot_convenience_select">
                                         <option value="left">좌측</option>
                                         <option value="right">우측</option>
@@ -552,7 +558,7 @@
                         <div class="copybot_settings_item">
                             <div class="copybot_settings_main">
                                 <div class="copybot_label_with_icon">
-                                    <span class="copybot_settings_label">마지막 메세지 삭제</span>
+                                    <span class="copybot_settings_label">마지막 메시지 삭제</span>
                                     <div class="fa-solid fa-trash copybot_icon_picker copybot_inline_icon_picker" id="copybot_delete_icon_picker" data-default="fa-trash" data-icon="fa-trash" title="클릭하여 아이콘 변경"></div>
                                 </div>
                                 <button id="copybot_delete_toggle" class="copybot_toggle_button" data-enabled="false">
@@ -561,12 +567,16 @@
                             </div>
                             <div id="copybot_delete_options" class="copybot_settings_sub" style="display: none;">
                                 <div class="copybot_settings_sub_row copybot_convenience_row">
-                                    <input type="checkbox" id="copybot_delete_submenu" class="copybot_checkbox">
-                                    <span class="copybot_convenience_label">확장 내부</span>
+                                    <label class="copybot_check_label">
+                                        <input type="checkbox" id="copybot_delete_submenu" class="copybot_checkbox">
+                                        <span class="copybot_convenience_label">확장 내부</span>
+                                    </label>
                                 </div>
                                 <div class="copybot_settings_sub_row copybot_convenience_row">
-                                    <input type="checkbox" id="copybot_delete_inputfield" class="copybot_checkbox">
-                                    <span class="copybot_convenience_label">입력필드:</span>
+                                    <label class="copybot_check_label">
+                                        <input type="checkbox" id="copybot_delete_inputfield" class="copybot_checkbox">
+                                        <span class="copybot_convenience_label">입력필드:</span>
+                                    </label>
                                     <select id="copybot_delete_position" class="text_pole copybot_convenience_select">
                                         <option value="left">좌측</option>
                                         <option value="right">우측</option>
@@ -589,12 +599,16 @@
                             </div>
                             <div id="copybot_delete_regenerate_options" class="copybot_settings_sub" style="display: none;">
                                 <div class="copybot_settings_sub_row copybot_convenience_row">
-                                    <input type="checkbox" id="copybot_delete_regenerate_submenu" class="copybot_checkbox">
-                                    <span class="copybot_convenience_label">확장 내부</span>
+                                    <label class="copybot_check_label">
+                                        <input type="checkbox" id="copybot_delete_regenerate_submenu" class="copybot_checkbox">
+                                        <span class="copybot_convenience_label">확장 내부</span>
+                                    </label>
                                 </div>
                                 <div class="copybot_settings_sub_row copybot_convenience_row">
-                                    <input type="checkbox" id="copybot_delete_regenerate_inputfield" class="copybot_checkbox">
-                                    <span class="copybot_convenience_label">입력필드:</span>
+                                    <label class="copybot_check_label">
+                                        <input type="checkbox" id="copybot_delete_regenerate_inputfield" class="copybot_checkbox">
+                                        <span class="copybot_convenience_label">입력필드:</span>
+                                    </label>
                                     <select id="copybot_delete_regenerate_position" class="text_pole copybot_convenience_select">
                                         <option value="left">좌측</option>
                                         <option value="right">우측</option>
@@ -605,14 +619,14 @@
                                 <div class="copybot_settings_sub_row copybot_convenience_row" style="margin-top: 6px;">
                                     <span class="copybot_convenience_label">캐시 우회:</span>
                                     <select id="copybot_regen_cache_mode" class="text_pole copybot_convenience_select">
-                                        <option value="off" selected>기본(끄기)</option>
+                                        <option value="off" selected>끄기</option>
                                         <option value="light">약하게</option>
                                         <option value="strong">강하게</option>
                                     </select>
                                 </div>
                                 <div class="copybot_description" style="margin-top: 6px; font-size: 11px; color: #666; line-height: 1.5;">
                                     재생성할 때 AI 서버의 프롬프트 캐시를 비켜가서 같은 답이 반복되는 것을 줄입니다.<br>
-                                    <strong>기본(끄기)</strong>: 캐시 우회를 하지 않습니다.<br>
+                                    <strong>끄기</strong>: 캐시 우회를 하지 않습니다.<br>
                                     <strong>약하게</strong>: 캐시 비용은 대부분 유지됩니다. 효과는 보통입니다.<br>
                                     <strong>강하게</strong>: 캐시 비용 절감이 없어집니다(비용↑). 효과는 가장 확실합니다.
                                 </div>
@@ -640,7 +654,7 @@
                                 </div>
                                 <button type="button" id="copybot_custom_slot_add" class="copybot_add_ghost copybot_custom_slot_add" title="버튼 추가"><i class="fa-solid fa-plus"></i></button>
                                 <div class="copybot_description" style="margin-top: 8px; font-size: 11px; color: #666; line-height: 1.5;">
-                                    원하는 동작을 고르고, 왼쪽 아이콘을 눌러 아이콘을 바꿀 수 있습니다. 버튼이 더 필요하면 '+ 버튼 추가'(최대 8개), × 로 지웁니다.<br>
+                                    원하는 동작을 고르고, 왼쪽 아이콘을 눌러 아이콘을 바꿀 수 있습니다. 버튼이 더 필요하면 '+' 칸을 누르면 추가(최대 8개), × 로 지웁니다.<br>
                                     <strong>확장 내부</strong>: 복사기 메뉴줄 아래 아이콘 줄에 추가 · <strong>입력필드</strong>: 채팅 입력창 옆에 아이콘 추가 · 퀵메뉴/플로팅 메뉴의 '커스텀' 섹션에도 자동으로 나타납니다.
                                 </div>
                             </div>
@@ -730,7 +744,7 @@
                                     </div>
                                 </div>
                                 <div class="copybot_description" style="margin-top: 12px; font-size:12px; color: #666;">
-                                    마법봉: 화면 우측 하단의 Extensions 메뉴(🪄)에서 접근<br>
+                                    마법봉: 입력창 옆 마법봉(🪄) 메뉴에서 접근<br>
                                     입력필드 아이콘: 채팅 입력창 옆에 아이콘 추가<br>
                                     <small>체크하면 오른쪽에 아이콘이 나타납니다. 그 아이콘을 누르면 접근 방식별로 아이콘을 따로 바꿀 수 있습니다.</small>
                                 </div>
@@ -840,7 +854,6 @@
                         </div>
                     </div>
                     
-                    <!-- 캡처 설정창 -->
                     <!-- 기타 설정창 -->
                     <div id="copybot_misc_panel" class="copybot_settings_panel" style="display: none;">
 						
@@ -851,8 +864,17 @@
                                     OFF
                                 </button>
                             </div>
+                            <div id="copybot_hq_profile_options" style="display: none; margin-top: 8px;">
+                                <label class="copybot_check_label">
+                                    <input type="checkbox" class="copybot_checkbox" id="copybot_hq_profile_list">
+                                    <span class="copybot_convenience_label">봇 목록에도 적용</span>
+                                </label>
+                                <div class="copybot_description" style="margin-top: 6px; font-size:12px; color: #666;">
+                                    끄면 채팅 화면의 프로필 사진만 고화질로 바뀝니다. 켜면 봇 목록의 사진도 바뀌며, 화면에 한 번이라도 보인 사진만 원본으로 받아 옵니다.
+                                </div>
+                            </div>
                             <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666;">
-                                프로필 사진을 고화질로 표시합니다.<br><small>이 옵션을 이용하는 것보다 SillyTavern의 <code>config.yaml</code> 파일에서 <code>thumbnails</code> 섹션의 <code>enabled</code> 값을 <code>true</code>에서 <code>false</code>로 변경하는 게 여러모로 훨씬 좋습니다. 파일 수정이 어려운 이용자를 위한 옵션입니다. 구형 기기를 사용할 경우 페이지 로딩 후 몇 초간 기니피그 한마리만큼의 성능 저하가 발생하며, 그 이후로는 햄스터 꼬리털 세포만큼의 성능 저하가 있습니다.</small>
+                                프로필 사진을 고화질로 표시합니다.<br><small>이 옵션을 이용하는 것보다 SillyTavern의 <code>config.yaml</code> 파일에서 <code>thumbnails</code> 섹션의 <code>enabled</code> 값을 <code>true</code>에서 <code>false</code>로 변경하는 게 여러모로 훨씬 좋습니다. 파일 수정이 어려운 이용자를 위한 옵션입니다. 구형 기기를 사용할 경우 페이지 로딩 후 몇 초간 기니피그 한 마리만큼의 성능 저하가 발생하며, 그 이후로는 햄스터 꼬리털 세포만큼의 성능 저하가 있습니다.</small>
                             </div>
                         </div>
                         
@@ -872,7 +894,7 @@
                             <div class="copybot_settings_main">
                                 <span class="copybot_settings_label">입력창 안내문</span>
                                 <select id="copybot_placeholder_mode" class="text_pole copybot_convenience_select" style="margin-left: auto;">
-                                    <option value="off" selected>기본(그대로)</option>
+                                    <option value="off" selected>그대로</option>
                                     <option value="hide">숨김</option>
                                     <option value="replace">변경</option>
                                 </select>
@@ -902,7 +924,7 @@
                                 </button>
                             </div>
                             <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666;">
-                                문제 해결을 위해 콘솔에 자세한 로그를 출력합니다. 이게 뭔지 모른다면 키지 마십시오! 근데 켜도 크게 상관은 없습니다. 개미 더듬이 세포 하나만큼의 성능 저하가 발생합니다.
+                                문제 해결을 위해 콘솔에 자세한 로그를 출력합니다. 이게 뭔지 모른다면 켜지 마십시오! 근데 켜도 크게 상관은 없습니다. 개미 더듬이 세포 하나만큼의 성능 저하가 발생합니다.
                             </div>
                         </div>
 
@@ -920,7 +942,7 @@
                                 확장 관리 창을 열지 않고 여기서 바로 깃허브 최신 버전을 받습니다. 업데이트 뒤엔 새로고침해야 적용됩니다. 깃허브에서 설치한 복사기에서만 동작합니다.
                             </div>
                             <div class="copybot_update_info">
-                                <div>깃헙링크: <a href="https://github.com/Unknown-7069/ggang-copy" target="_blank" rel="noopener noreferrer" style="color: #4299e1; text-decoration: none;">https://github.com/Unknown-7069/ggang-copy</a></div>
+                                <div>깃허브 링크: <a href="https://github.com/Unknown-7069/ggang-copy" target="_blank" rel="noopener noreferrer" style="color: #4299e1; text-decoration: none;">https://github.com/Unknown-7069/ggang-copy</a></div>
                             </div>
                         </div>
 

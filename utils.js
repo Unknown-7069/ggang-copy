@@ -3,6 +3,9 @@
 (function() {
     'use strict';
 
+    // 모듈 안에서 쓰는 디버그 로그 — this 에 기대지 않는다(함수를 값으로 떼어 콜백으로 넘겨도 동작)
+    const log = (...a) => window.CopyBotUtils.debugLog(window.copybot_debug_mode, ...a);
+
     // 전역 네임스페이스 생성
     window.CopyBotUtils = {
         // 디버그 로그 전용 함수
@@ -25,17 +28,15 @@
         // 마지막 메시지 번호를 구하는 함수
         getLastMessageIndex: function() {
             try {
-                const context = window.SillyTavern.getContext();
+                const context = window.SillyTavern?.getContext?.();
                 if (!context || !context.chat || context.chat.length === 0) {
-                    this.debugLog(window.copybot_debug_mode, '대화 기록이 없습니다.');
-                    return 0;
+                    log('대화 기록이 없습니다.');
+                    return 0;   // 빈 채팅도 0 (호출자가 많아 이 약속은 유지)
                 }
-                
+
                 // 마지막 메시지의 인덱스 (0부터 시작하므로 length - 1)
                 const lastIndex = context.chat.length - 1;
-                if (this.debugLog) {
-					this.debugLog(window.copybot_debug_mode, `마지막 메시지 번호 계산됨: ${lastIndex}`);
-				}
+				log(`마지막 메시지 번호 계산됨: ${lastIndex}`);
 				return lastIndex;
             } catch (error) {
                 console.error('깡갤 복사기: 마지막 메시지 번호 계산 실패', error);
@@ -46,15 +47,15 @@
         // 중복 저장 방지를 위한 값 비교 함수
         hasValueChanged: function(lastSavedValues, fieldName, currentValue) {
             const hasChanged = lastSavedValues[fieldName] !== currentValue;
-			if (hasChanged && this.debugLog) {
-				this.debugLog(window.copybot_debug_mode, `${fieldName} 값 변경 감지:`, lastSavedValues[fieldName], '->', currentValue);
+			if (hasChanged) {
+				log(`${fieldName} 값 변경 감지:`, lastSavedValues[fieldName], '->', currentValue);
 			}
 			return hasChanged;
         },
 
         // RGB 문자열을 객체로 변환
         rgbStringToObj: function(rgbStr) {
-            const match = rgbStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+            const match = String(rgbStr || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
             if (!match) return { r: 0, g: 0, b: 0, a: 1 };
             return {
                 r: parseInt(match[1], 10),

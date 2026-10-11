@@ -33,10 +33,26 @@
 //   • 특징: 다중 백업 시스템, 하위 호환성, 마이그레이션 지원
 //
 // 📦 commands.js (명령어 실행)
-//   • 역할: SillyTavern 명령어 실행 및 텍스트 처리
-//   • 함수: executeSimpleCommand(), executeCopyCommand(), triggerCacheBustRegeneration(), removeTagsFromElement(), copyTextboxContent()
+//   • 역할: SillyTavern 슬래시 명령 직접 실행(입력창 경유 없음) 및 텍스트 처리, 확장 업데이트
+//   • 함수: executeSilentCommand(), executeSimpleCommand()(호환 껍데기), jumpToMessage(), executeCopyCommand(), writeToClipboard(),
+//          removeTagsFromElement(), copyTextboxContent(), triggerCacheBustRegeneration()/smartDeleteAndRegenerate()(generation.js 위임),
+//          checkExtensionUpdate(), updateExtension(), showExtensionVersion()
 //   • 의존성: utils.js
-//   • 특징: 비동기 처리, 토스트 메시지, 클립보드 조작, 정규식 태그 제거
+//   • 특징: 삭제 명령(/del /cut /delname /delchat /delswipe) 좆됨방지 가드, 클립보드 조작, 정규식 태그 제거
+//
+// 📦 generation.js (생성·삭제 파이프라인)
+//   • 역할: 마지막 메시지 삭제, 삭제 후 재생성, 응답 없이 보내기, 생성 상태 추적
+//   • 함수: deleteLastMessage(), deleteLastUserMessage(), deleteAndRegenerate(), sendWithoutReply(), abort(), isBusy() 등
+//   • 의존성: utils.js, settings.js(좆됨방지 설정)
+//
+// 📦 actions.js (동작 레지스트리)
+//   • 역할: 소메뉴·입력필드 아이콘·퀵/플로팅 메뉴·커스텀 버튼이 공유하는 동작 목록과 실행 창구 run()
+//
+// 📦 shortcut.js (커스텀 버튼 바로가기)
+//   • 역할: 실리 메뉴 열기·프리셋/프로필/페르소나/봇 바꾸기·확장 연결·QR 세트 팝업
+//
+// 📦 capture.js (메시지 캡처)
+//   • 역할: 미리보기(= 결과물) 생성, 이미지 렌더(vendor modern-screenshot, 첫 캡처 때 지연 로드), 복사·저장
 //
 // 📦 icons.js (아이콘 관리) 🎯 UI 컴포넌트
 //   • 역할: 입력창 아이콘의 완전한 생명주기 관리 및 DOM 안정성 보장
@@ -45,10 +61,10 @@
 //   • 특징: 4가지 위치 지원, 테마 적응형 스타일링, 다중 시점 업데이트, 콜백 기반 외부 함수 호출
 //
 // 📦 profiles.js (프로필 사진 및 이미지 관리) 🎯 UI 컴포넌트  
-//   • 역할: 고화질 프로필 사진 변환, 캐릭터 정보 추출, 대필용 API 프로필 목록 로드
-//   • 함수: enableHighQualityProfiles(), getCurrentCharacterInfo(), loadGhostwriteProfiles(), convertToHighQuality() 등
+//   • 역할: 고화질 프로필 사진 변환, 대필용 API 프로필 목록 로드
+//   • 함수: enableHighQualityProfiles(), disableHighQualityProfiles(), loadGhostwriteProfiles() 등
 //   • 의존성: utils.js
-//   • 특징: 고화질 이미지 변환, MutationObserver 기반 실시간 처리, 캐시 시스템
+//   • 특징: 고화질 이미지 변환(옵션 ON 일 때만), MutationObserver 기반 실시간 처리
 //
 // 📦 ghostwrite.js (대필 및 자동저장 시스템) ⭐ 핵심 기능 모듈
 //   • 역할: 대필 실행, 프로필 전환, 하이브리드 자동저장, 임시 프롬프트 관리, 상태 아이콘 시스템
@@ -91,9 +107,10 @@
 //
 // 📦 index.js (메인 컨트롤러) ⚡ 통합 허브
 //   • 역할: 모듈 로딩, 초기화 순서 관리, SillyTavern API 연동
-//   • 기능: 모듈 간 통신 중계, 초기화 로직, fallback 처리
-//   • 의존성: 모든 모듈 (로딩 순서: utils → settings → presets → commands → icons → profiles → ghostwrite → ui)
-//   • 특징: 모듈 로드 순서 관리, 콜백 주입 시스템, 안전한 fallback 처리, 통합 초기화
+//   • 기능: 모듈 간 통신 중계, 초기화 로직(모듈별 격리 safeInit), 초기화 재시도
+//   • 의존성: 모든 모듈 (실행 순서: utils → settings → presets → commands → generation → actions → shortcut → capture
+//            → icons → profiles → ghostwrite → messageOperations → ui → wandMenu. utils 먼저, 나머지는 병렬 다운로드·순서 실행)
+//   • 특징: 콜백 주입 시스템, 문서 스크롤 가드·채팅 전환 재적용은 기능이 하나라도 ON 일 때만 설치
 //
 // === 작업 가이드라인 ===
 //
@@ -157,7 +174,7 @@
 //
 // 📍 확장성 고려사항:
 //   • 새 모듈 추가 시: window.CopyBot[ModuleName] 네이밍 규칙 준수
-//   • 의존성 순서: utils → settings → presets → commands → icons → profiles → ghostwrite → messageOperations → wandMenu → ui → [새모듈] → index
+//   • 의존성 순서: utils → settings → presets → commands → generation → actions → shortcut → capture → icons → profiles → ghostwrite → messageOperations → ui → wandMenu → [새모듈] (index 가 로더)
 //   • UI 관련 모듈은 ui.js 이후에 로드, 비UI 모듈은 ui.js 이전에 로드
 //   • 에러 핸들링: 모든 공개 함수는 try-catch 필수
 //   • 하위 호환성: 기존 함수명 유지, 새 기능은 옵션 파라미터로
@@ -214,6 +231,7 @@
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = `${BASE_PATH}/${fileName}`;
+            script.async = false;   // 동적 삽입 스크립트도 삽입 순서대로 실행(다운로드는 병렬)
             script.onload = () => {
                 loadedModules.add(fileName);
                 debugLog(`${EXTENSION_NAME}: ${fileName} 로드 완료`);
@@ -227,20 +245,17 @@
         });
     }
 
-    // 모듈별 로드 함수 (간결화)
-    async function loadUtilsModule() { return createModuleLoader('utils.js'); }
-    async function loadSettingsModule() { return createModuleLoader('settings.js'); }
-    async function loadPresetsModule() { return createModuleLoader('presets.js'); }
-    async function loadCommandsModule() { return createModuleLoader('commands.js'); }
-    async function loadGenerationModule() { return createModuleLoader('generation.js'); }
-    async function loadActionsModule() { return createModuleLoader('actions.js'); }
-    async function loadCaptureModule() { return createModuleLoader('capture.js'); }
-    async function loadIconsModule() { return createModuleLoader('icons.js'); }
-	async function loadProfilesModule() { return createModuleLoader('profiles.js'); }
-	async function loadGhostwriteModule() { return createModuleLoader('ghostwrite.js'); }
-	async function loadMessageOperationsModule() { return createModuleLoader('messageOperations.js'); }
-	async function loadUIModule() { return createModuleLoader('ui.js'); }
-	async function loadWandMenuModule() { return createModuleLoader('wandMenu.js'); }
+    // 모듈 실행 순서 (이 배열 순서 = 실행 순서)
+    // utils.js 는 commands/generation 이 로드 시점에 바로 확인하므로 먼저 단독으로 끝낸다.
+    // 나머지는 async=false 로 한꺼번에 삽입 → 다운로드는 병렬, 실행은 배열 순서. 하나라도 실패하면 reject(실패한 것만 재시도 때 다시 로드).
+    const MODULE_FILES = [
+        'settings.js', 'presets.js', 'commands.js', 'generation.js', 'actions.js', 'shortcut.js', 'capture.js',
+        'icons.js', 'profiles.js', 'ghostwrite.js', 'messageOperations.js', 'ui.js', 'wandMenu.js'
+    ];
+    async function loadAllModules() {
+        await createModuleLoader('utils.js');
+        await Promise.all(MODULE_FILES.map(createModuleLoader));
+    }
 
 	// 대필 진행 상태 변수들은 ghostwrite 모듈로 이동됨
 
@@ -250,7 +265,7 @@
             window.CopyBotUtils.debugLog(isDebugMode, ...args);
         } else {
             // utils.js 로드 전에는 직접 출력 (초기화 로그 확인용)
-            if (isDebugMode || args[0]?.includes('🔥')) {
+            if (isDebugMode || (typeof args[0] === 'string' && args[0].includes('🔥'))) {
                 console.log(`[${EXTENSION_NAME} (초기화 중)]`, ...args);
             }
         }
@@ -260,20 +275,6 @@
     function showStatusIcon(fieldName, isLoading = true) {
         return window.CopyBotGhostwrite ? 
             window.CopyBotGhostwrite.showStatusIcon(fieldName, isLoading) :
-            console.error('CopyBotGhostwrite 모듈이 로드되지 않음');
-    }
-
-    // 값 변경 감지 함수 (ghostwrite 모듈 사용)
-    function hasValueChanged(fieldName, currentValue) {
-        return window.CopyBotGhostwrite ?
-            window.CopyBotGhostwrite.hasValueChanged(fieldName, currentValue) :
-            true;
-    }
-
-    // 하이브리드 자동저장 함수 (ghostwrite 모듈 사용)
-    async function executeHybridAutoSave(fieldName, triggerType = 'unknown') {
-        return window.CopyBotGhostwrite ? 
-            await window.CopyBotGhostwrite.executeHybridAutoSave(fieldName, triggerType) :
             console.error('CopyBotGhostwrite 모듈이 로드되지 않음');
     }
 
@@ -291,40 +292,13 @@
             console.error('CopyBotGhostwrite 모듈이 로드되지 않음');
     }
 
-    // 색상 변환 헬퍼 함수들 - icons.js 모듈로 이동됨 (utils 모듈 사용)
-	function rgbStringToObj(rgbStr) {
-		return window.CopyBotUtils ? 
-			window.CopyBotUtils.rgbStringToObj(rgbStr) :
-			{ r: 0, g: 0, b: 0, a: 1 };
-	}
-
-	function rgbToHsl(r, g, b) {
-		return window.CopyBotUtils ? 
-			window.CopyBotUtils.rgbToHsl(r, g, b) :
-			{ h: 0, s: 0, l: 0 };
-	}
-    
-    // 마지막 메시지 번호를 구하는 함수 (utils 모듈 사용)
+    // 마지막 메시지 번호를 구하는 함수 (utils 모듈 사용) — ui 콜백으로 넘기는 바인딩 걱정 없는 래퍼
     function getLastMessageIndex() {
-        return window.CopyBotUtils ? 
+        return window.CopyBotUtils ?
             window.CopyBotUtils.getLastMessageIndex() :
             0;
     }
 
-	// SillyTavern에서 현재 캐릭터 정보 가져오는 함수
-	function getCurrentCharacterInfo() {
-		return window.CopyBotProfiles ? 
-			window.CopyBotProfiles.getCurrentCharacterInfo() :
-			console.error('깡갤 복사기: CopyBotProfiles 모듈이 로드되지 않음');
-	}
-
-	// 봇 프로필 이미지 이중 시도 함수 (예외처리 강화)
-	function tryBotProfilePaths(img, originalSrc, fileName, characterInfo, serverBaseUrl) {
-		return window.CopyBotProfiles ? 
-			window.CopyBotProfiles.tryBotProfilePaths(img, originalSrc, fileName, characterInfo, serverBaseUrl) :
-			console.error('깡갤 복사기: CopyBotProfiles 모듈이 로드되지 않음');
-	}
-    
     // 조절점 및 placeholder 관리 함수들 (settings 모듈로 이동됨)
     function removeResizeHandle() {
         if (window.CopyBotSettings) {
@@ -368,46 +342,7 @@
             console.error('깡갤 복사기: CopyBotProfiles 모듈이 로드되지 않음');
     }
     
-    function processExistingImages() {
-        return window.CopyBotProfiles ? 
-            window.CopyBotProfiles.processExistingImages() :
-            console.error('깡갤 복사기: CopyBotProfiles 모듈이 로드되지 않음');
-    }
-    
-    function processNewImages(node) {
-        return window.CopyBotProfiles ? 
-            window.CopyBotProfiles.processNewImages(node) :
-            console.error('깡갤 복사기: CopyBotProfiles 모듈이 로드되지 않음');
-    }
-    
-        function convertToHighQuality(img) {
-        return window.CopyBotProfiles ? 
-            window.CopyBotProfiles.convertToHighQuality(img) :
-            console.error('깡갤 복사기: CopyBotProfiles 모듈이 로드되지 않음');
-    }
-    
     // HTML 템플릿은 settings.html에서 자동 제공됨
-
-    // HTML 특수문자 처리 (utils 모듈 사용)
-    function escapeHtml(str) {
-        return window.CopyBotUtils ? 
-            window.CopyBotUtils.escapeHtml(str) :
-            (typeof str === 'string' ? str : '');
-    }
-
-    // 캐시 우회를 위한 새로운 재생성 함수 (commands 모듈 사용)
-    function triggerCacheBustRegeneration() {
-        return window.CopyBotCommands ? 
-            window.CopyBotCommands.triggerCacheBustRegeneration() :
-            console.error('깡갤 복사기: CopyBotCommands 모듈이 로드되지 않음');
-    }
-
-	// 스마트 삭제 후 재생성 함수 (commands 모듈 사용)
-    function smartDeleteAndRegenerate() {
-        return window.CopyBotCommands ? 
-            window.CopyBotCommands.smartDeleteAndRegenerate() :
-            console.error('깡갤 복사기: CopyBotCommands 모듈이 로드되지 않음');
-    }
 
     // 프리셋 모듈을 통한 데이터 마이그레이션 (함수 제거, 모듈 호출로 변경)
     function performDataMigration() {
@@ -416,13 +351,6 @@
         } else {
             console.error('깡갤 복사기: CopyBotPresets 모듈이 로드되지 않음');
         }
-    }
-
-    // 프리셋 모듈을 통한 프리셋 데이터 조회 (모듈 호출로 변경)
-    function getPresets() {
-        return window.CopyBotPresets ? 
-            window.CopyBotPresets.getPresets() :
-            [{ name: '기본 프리셋', prompt: '', excludePrompt: '', profile: 'default' }];
     }
 
     // 설정 저장 함수 (settings 모듈 사용)
@@ -436,7 +364,7 @@
     function applyDebugMode(enabled) {
         isDebugMode = !!enabled;
         window.copybot_debug_mode = !!enabled;
-        ['CopyBotCommands', 'CopyBotGeneration', 'CopyBotCapture', 'CopyBotIcons', 'CopyBotUI', 'CopyBotWandMenu'].forEach(name => {
+        ['CopyBotCommands', 'CopyBotGeneration', 'CopyBotCapture', 'CopyBotIcons', 'CopyBotUI', 'CopyBotWandMenu', 'CopyBotShortcut', 'CopyBotProfiles'].forEach(name => {
             try { window[name]?.setDebugMode?.(!!enabled); } catch (e) { /* 무시 */ }
         });
     }
@@ -450,7 +378,6 @@
                 disableHighQualityProfiles: disableHighQualityProfiles,
                 updatePresetDropdown: updatePresetDropdown, // 이제 정의됨!
                 loadPresetFromSettings: loadPresetFromSettings,
-                getPresets: getPresets,
                 setDebugMode: applyDebugMode
             };
             window.CopyBotSettings.loadSettings(callbacks);
@@ -471,46 +398,18 @@
 			console.error('CopyBotGhostwrite 모듈이 로드되지 않음');
 	}
 
-	// 임시 프롬프트 입력칸 제거 함수 (ghostwrite 모듈 사용)
-	function removeTempPromptField() {
-		return window.CopyBotGhostwrite ? 
-			window.CopyBotGhostwrite.removeTempPromptField() :
-			console.error('CopyBotGhostwrite 모듈이 로드되지 않음');
-	}
-
-	// 임시 프롬프트 입력칸 새로고침 함수 (ghostwrite 모듈 사용)
-	function refreshTempPromptField() {
-		return window.CopyBotGhostwrite ? 
-			window.CopyBotGhostwrite.refreshTempPromptField() :
-			console.error('CopyBotGhostwrite 모듈이 로드되지 않음');
-	}
-
         // 대필 실행 함수 (ghostwrite 모듈 사용)
     async function executeGhostwrite() {
-        return window.CopyBotGhostwrite ? 
+        return window.CopyBotGhostwrite ?
             await window.CopyBotGhostwrite.executeGhostwrite() :
-            console.error('CopyBotGhostwrite 모듈이 로드되지 않음');
-    }
-
-    // 임시 프롬프트 저장 함수 (ghostwrite 모듈 사용)
-    function saveTempPrompt() {
-        return window.CopyBotGhostwrite ? 
-            window.CopyBotGhostwrite.saveTempPrompt() :
             console.error('CopyBotGhostwrite 모듈이 로드되지 않음');
     }
 
     // 임시 프롬프트 로드 함수 (ghostwrite 모듈 사용)
     function loadTempPrompt() {
-        return window.CopyBotGhostwrite ? 
+        return window.CopyBotGhostwrite ?
             window.CopyBotGhostwrite.loadTempPrompt() :
             console.error('CopyBotGhostwrite 모듈이 로드되지 않음');
-    }
-
-    // 단순 명령어를 실행하는 범용 함수 (commands 모듈 사용)
-    async function executeSimpleCommand(command, successMessage, callback, isGhostwriting = false) {
-        return window.CopyBotCommands ? 
-            await window.CopyBotCommands.executeSimpleCommand(command, successMessage, callback, isGhostwriting) :
-            console.error('깡갤 복사기: CopyBotCommands 모듈이 로드되지 않음');
     }
 
     // 메시지 복사 명령 실행 함수 (commands 모듈 사용)
@@ -542,40 +441,10 @@
             console.error('깡갤 복사기: CopyBotUI 모듈이 로드되지 않음');
     }
 
-    // isInputFieldReady 함수 - icons.js 모듈로 이동됨
-	function isInputFieldReady() {
-		if (window.CopyBotIcons) {
-			return window.CopyBotIcons.isInputFieldReady();
-		} else {
-			console.error('깡갤 복사기: CopyBotIcons 모듈이 로드되지 않음');
-			return false;
-		}
-	}
-
-    // waitForLayoutStabilization 함수 - icons.js 모듈로 이동됨
-	function waitForLayoutStabilization() {
-		if (window.CopyBotIcons) {
-			return window.CopyBotIcons.waitForLayoutStabilization();
-		} else {
-			console.error('깡갤 복사기: CopyBotIcons 모듈이 로드되지 않음');
-			return Promise.resolve(false);
-		}
-	}
-
     // safeUpdateInputFieldIcons 함수 - icons.js 모듈로 이동됨
 	async function safeUpdateInputFieldIcons() {
 		if (window.CopyBotIcons) {
 			return await window.CopyBotIcons.safeUpdateInputFieldIcons();
-		} else {
-			console.error('깡갤 복사기: CopyBotIcons 모듈이 로드되지 않음');
-		}
-	}
-
-
-    // updateInputFieldIcons 함수 - icons.js 모듈로 이동됨
-	function updateInputFieldIcons() {
-		if (window.CopyBotIcons) {
-			return window.CopyBotIcons.updateInputFieldIcons();
 		} else {
 			console.error('깡갤 복사기: CopyBotIcons 모듈이 로드되지 않음');
 		}
@@ -603,13 +472,6 @@
 				'기본 프리셋';
 		}
 
-		// 프리셋 모듈을 통한 프리셋 저장 (모듈 호출로 변경)
-		function savePresets(presets) {
-			return window.CopyBotPresets ? 
-				window.CopyBotPresets.savePresets(presets) :
-				false;
-		}
-
 		// 프리셋 모듈을 통한 프리셋 로드 (모듈 호출로 변경)
 		function loadPreset(presetName) {
 			if (window.CopyBotPresets) {
@@ -622,15 +484,6 @@
 		// settings에서 호출하는 프리셋 로드용 (호환성)
 		function loadPresetFromSettings(presetName) {
 			return loadPreset(presetName);
-		}
-
-		// 프리셋 모듈을 통한 현재 프리셋 저장 (모듈 호출로 변경)
-		function saveCurrentPreset(isAutoSave = false) {
-			if (window.CopyBotPresets) {
-				return window.CopyBotPresets.saveCurrentPreset(isAutoSave);
-			} else {
-				console.error('깡갤 복사기: CopyBotPresets 모듈이 로드되지 않음');
-			}
 		}
 
 		// 프리셋 모듈을 통한 프리셋 이름 변경 (모듈 호출로 변경)
@@ -782,18 +635,9 @@
             console.error('CopyBotMessageOperations 모듈이 로드되지 않음');
     }
 
-    // 메시지 범위 정보 조회 함수 (messageOperations 모듈 사용)
-    function getMessageRange() {
-        return window.CopyBotMessageOperations ? 
-            window.CopyBotMessageOperations.getMessageRange() :
-            { total: 0, lastIndex: -1 };
-    }
-
-    // 메시지 인덱스 유효성 검사 함수 (messageOperations 모듈 사용)
-    function validateMessageIndices(startIndex, endIndex) {
-        return window.CopyBotMessageOperations ? 
-            window.CopyBotMessageOperations.validateMessageIndices(startIndex, endIndex) :
-            false;
+    // 한 단계의 예외가 뒤 단계(다른 모듈 초기화·UI 로드)를 끊지 않게 격리해서 실행
+    function safeInit(name, fn) {
+        try { fn(); } catch (e) { console.error(`깡갤 복사기: ${name} 초기화 실패`, e); }
     }
 
     // 초기화 함수 (마이그레이션 포함)
@@ -802,7 +646,7 @@
     function scheduleInitRetry(reason) {
         isInitialized = false;
         if (initRetries >= 5) {
-            console.error(`깡갤 복사기: 초기화 재시도 한도 도달(${reason}) — 페이지를 새로고침해 주세요`);
+            console.error(`깡갤 복사기: 초기화 재시도 한도 도달(${reason}) — 페이지를 새로고침해 주십시오`);
             return;
         }
         initRetries++;
@@ -815,53 +659,36 @@
         isInitialized = true;
         debugLog('깡갤 복사기: 초기화 시작...');
         
-        // 모듈들 순차 로드
+        // 모듈 로드 (실패하면 재시도 예약 — 이미 로드된 모듈은 loadedModules 로 건너뜀)
         try {
-            await loadUtilsModule();
-            await loadSettingsModule();
-            await loadPresetsModule();
-            await loadCommandsModule();
-            await loadGenerationModule();
-            await loadActionsModule();
-            await loadCaptureModule();
-			await loadIconsModule();
-			await loadProfilesModule();
-			await loadGhostwriteModule();
-			await loadMessageOperationsModule();
-			await loadUIModule();
-			await loadWandMenuModule();
+            await loadAllModules();
+        } catch (error) {
+            console.error('깡갤 복사기: 모듈 로드 실패', error);
+            scheduleInitRetry('모듈 로드 실패');
+            return;
+        }
 
-			// 프리셋 모듈 초기화
-            if (window.CopyBotPresets) {
-                window.CopyBotPresets.init({
-                    utils: window.CopyBotUtils,
-                    settings: window.CopyBotSettings
-                });
-            }
-            
-            // commands 모듈 초기화
-			if (window.CopyBotCommands) {
-				window.CopyBotCommands.init({
-					isDebugMode: isDebugMode
-				});
-			}
+        // 모듈별 초기화 — 하나가 예외를 던져도 나머지 모듈과 설정 UI 는 계속 진행한다(safeInit 격리)
+        window.CopyBotBasePath = BASE_PATH;   // capture 가 vendor 라이브러리를 첫 캡처 때 지연 로드할 경로
 
-			// generation 모듈 초기화 (생성 상태 추적 이벤트 바인딩)
-			if (window.CopyBotGeneration) {
-				window.CopyBotGeneration.init({
-					isDebugMode: isDebugMode
-				});
-			}
+        safeInit('presets', () => {
+            if (window.CopyBotPresets) window.CopyBotPresets.init({});
+        });
 
-			// capture 모듈 초기화 (vendor 라이브러리는 첫 캡처 때 지연 로드)
-			window.CopyBotBasePath = BASE_PATH;
-			if (window.CopyBotCapture) {
-				window.CopyBotCapture.init({
-					isDebugMode: isDebugMode
-				});
-			}
+        safeInit('commands', () => {
+            if (window.CopyBotCommands) window.CopyBotCommands.init({ isDebugMode: isDebugMode });
+        });
 
-			// icons 모듈 초기화
+        // generation 모듈 초기화 (생성 상태 추적 이벤트 바인딩)
+        safeInit('generation', () => {
+            if (window.CopyBotGeneration) window.CopyBotGeneration.init({ isDebugMode: isDebugMode });
+        });
+
+        safeInit('capture', () => {
+            if (window.CopyBotCapture) window.CopyBotCapture.init({ isDebugMode: isDebugMode });
+        });
+
+        safeInit('icons', () => {
 			if (window.CopyBotIcons) {
 				window.CopyBotIcons.init({
 					utils: window.CopyBotUtils,
@@ -871,42 +698,41 @@
 							executeGhostwrite: executeGhostwrite,
 							removeTagsFromElement: () => window.CopyBotCommands?.removeTagsFromElement('#send_textarea'),
 							executeSimpleCommand: (cmd, msg, callback) => window.CopyBotCommands?.executeSimpleCommand(cmd, msg, callback),
-							triggerCacheBustRegeneration: () => window.CopyBotCommands?.triggerCacheBustRegeneration(),
 							smartDeleteAndRegenerate: () => window.CopyBotCommands?.smartDeleteAndRegenerate(),
 							deleteLastMessage: () => window.CopyBotGeneration?.deleteLastMessage(),
-							runAction: (id) => window.CopyBotActions?.run(id),
 							toggleQuickMenu: () => window.CopyBotWandMenu?.toggleQuickMenu()
 						}
 				});
 			}
+        });
 
-			// profiles 모듈 초기화
+        safeInit('profiles', () => {
 			if (window.CopyBotProfiles) {
 				window.CopyBotProfiles.init({
 					utils: window.CopyBotUtils,
 					isDebugMode: isDebugMode
 				});
 			}
+        });
 
-			// ghostwrite 모듈 초기화
+        safeInit('ghostwrite', () => {
 			if (window.CopyBotGhostwrite) {
 				window.CopyBotGhostwrite.init({
-					utils: window.CopyBotUtils,
-					settings: window.CopyBotSettings,
-					presets: window.CopyBotPresets,
-					commands: window.CopyBotCommands
+					utils: window.CopyBotUtils
 				});
 			}
+        });
 
-			// messageOperations 모듈 초기화
+        safeInit('messageOperations', () => {
 			if (window.CopyBotMessageOperations) {
 				window.CopyBotMessageOperations.init({
 					utils: window.CopyBotUtils,
 					commands: window.CopyBotCommands
 				});
 			}
+        });
 
-			// ui 모듈 초기화
+        safeInit('ui', () => {
 			if (window.CopyBotUI) {
 				window.CopyBotUI.init({
 					isDebugMode: isDebugMode,
@@ -914,10 +740,11 @@
 						// utils 모듈 함수들
 						debugLog: window.CopyBotUtils?.debugLog,
 						escapeHtml: window.CopyBotUtils?.escapeHtml,
-						getLastMessageIndex: window.CopyBotUtils?.getLastMessageIndex,
-						
+						getLastMessageIndex: getLastMessageIndex,
+
 						// settings 모듈 함수들  
-						saveSettings: window.CopyBotSettings?.saveSettings,
+						// 주의: window.CopyBotSettings.saveSettings 를 그대로 넘기면 this 가 callbacks 가 돼 디바운스 타이머 안에서 this.saveSettingsNow 가 없어 저장이 조용히 실패함 → 바인딩된 래퍼로
+						saveSettings: saveSettings,
 						removeResizeHandle: removeResizeHandle,
 						restoreResizeHandle: restoreResizeHandle,
 						hidePlaceholder: hidePlaceholder,
@@ -926,7 +753,6 @@
 						
 						// presets 모듈 함수들
 						loadPreset: loadPreset,
-						saveCurrentPreset: saveCurrentPreset,
 						addNewPreset: addNewPreset,
 						deletePreset: deletePreset,
 						renamePreset: renamePreset,
@@ -942,19 +768,15 @@
 						reorderPresets: reorderPresets,
 						isEditMode: () => window.CopyBotPresets?.isEditMode(),
 						
-						// commands 모듈 함수들
-						executeSimpleCommand: executeSimpleCommand,
-						executeSilentCommand: (cmd, msg, options) => window.CopyBotCommands?.executeSilentCommand(cmd, msg, options),
+						// commands / generation / actions 모듈 함수들
 						jumpToMessage: (index, msg) => window.CopyBotCommands?.jumpToMessage(index, msg),
 						deleteLastMessage: () => window.CopyBotGeneration?.deleteLastMessage(),
 						deleteAndRegenerate: () => window.CopyBotGeneration?.deleteAndRegenerate(),
-						runAction: (id) => window.CopyBotActions?.run(id),
+						runAction: (id, slotIndex, anchor) => window.CopyBotActions?.run(id, slotIndex, anchor),
 						executeCopyCommand: executeCopyCommand,
 						removeTagsFromElement: removeTagsFromElement,
 						copyTextboxContent: copyTextboxContent,
-						triggerCacheBustRegeneration: triggerCacheBustRegeneration,
-						smartDeleteAndRegenerate: smartDeleteAndRegenerate,
-						
+
 						// icons 모듈 함수들
 						safeUpdateInputFieldIcons: safeUpdateInputFieldIcons,
 						updateInputFieldIcons: () => window.CopyBotIcons?.updateInputFieldIcons(),
@@ -965,13 +787,7 @@
 						loadGhostwriteProfiles: loadGhostwriteProfiles,
 						
 						// ghostwrite 모듈 함수들
-						executeGhostwrite: executeGhostwrite,
 						addTempPromptField: addTempPromptField,
-						updateTempPromptStyle: updateTempPromptStyle,
-						saveTempPrompt: saveTempPrompt,
-						loadTempPrompt: loadTempPrompt,
-						removeTempPromptField: () => window.CopyBotGhostwrite?.removeTempPromptField(),
-						refreshTempPromptField: () => window.CopyBotGhostwrite?.refreshTempPromptField(),
 						scheduleDebounceAutoSave: scheduleDebounceAutoSave,
 						scheduleImmediateAutoSave: scheduleImmediateAutoSave,
 						showStatusIcon: showStatusIcon,
@@ -984,26 +800,19 @@
 						executeHideCommand: executeHideCommand,
 						executeUnhideCommand: executeUnhideCommand,
 						executeMultiDelete: executeMultiDelete,
-						getMessageRange: getMessageRange,
-						validateMessageIndices: validateMessageIndices,
-						
+
 						// 기타 필요한 함수들
 						setDebugMode: applyDebugMode
 					}
 				});
 			}
+        });
 
-			// wandMenu 모듈 초기화
+        safeInit('wandMenu', () => {
 			if (window.CopyBotWandMenu) {
 				window.CopyBotWandMenu.init({
 					isDebugMode: isDebugMode,
 					callbacks: {
-						// 명령어 실행
-						executeSimpleCommand: (cmd, msg, callback) =>
-							window.CopyBotCommands?.executeSimpleCommand(cmd, msg, callback),
-						executeSilentCommand: (cmd, msg, options) =>
-							window.CopyBotCommands?.executeSilentCommand(cmd, msg, options),
-
 						// 메시지 이동
 						jumpToMessage: (index, msg) =>
 							window.CopyBotCommands?.jumpToMessage(index, msg),
@@ -1011,10 +820,8 @@
 						// 다중(범위) 삭제 — 검증·경고창·/cut 은 messageOperations 한 곳
 						executeMultiDelete: executeMultiDelete,
 
-						// 삭제 / 재생성 / 커스텀 동작 (generation.js, actions.js)
-						deleteLastMessage: () => window.CopyBotGeneration?.deleteLastMessage(),
-						deleteAndRegenerate: () => window.CopyBotGeneration?.deleteAndRegenerate(),
-						runAction: (id) => window.CopyBotActions?.run(id),
+						// 입력값 없는 동작(이동·태그 제거·삭제·삭제 후 재생성·커스텀)은 전부 동작 레지스트리(actions.js) 경유
+						runAction: (id, slotIndex, anchor) => window.CopyBotActions?.run(id, slotIndex, anchor),
 						getCustomSlots: () => window.CopyBotActions?.getEnabledSlots() || [],
 
 						// 플로팅 메뉴 설정 확인
@@ -1023,18 +830,6 @@
 							iconClass: $('#copybot_float_icon_picker').data('icon') || 'fa-bolt'
 						}),
 
-						// 태그 제거
-						removeTagsFromElement: (selector) => 
-							window.CopyBotCommands?.removeTagsFromElement(selector),
-						
-						// 재생성
-						triggerCacheBustRegeneration: () => 
-							window.CopyBotCommands?.triggerCacheBustRegeneration(),
-						
-						// 삭제 후 재생성
-						smartDeleteAndRegenerate: () => 
-							window.CopyBotCommands?.smartDeleteAndRegenerate(),
-						
 						// 복사 (기존 함수 - 텍스트박스 포함)
 						executeCopyCommand: (start, end) => 
 							window.CopyBotCommands?.executeCopyCommand(start, end),
@@ -1049,10 +844,10 @@
 						getMessageRange: () => 
 							window.CopyBotMessageOperations?.getMessageRange(),
 						
-						// 좆됨방지 설정 확인
-						isConfirmDeleteEnabled: () => 
-							$('#copybot_confirm_delete_toggle').attr('data-enabled') === 'true',
-						
+						// 좆됨방지 설정 확인 — 판정은 settings.js 한 곳(fail-closed)에 위임. 모듈이 없으면 확인하는 쪽(true)
+						isConfirmDeleteEnabled: () =>
+							window.CopyBotSettings?.isConfirmDeleteEnabled ? window.CopyBotSettings.isConfirmDeleteEnabled() : true,
+
 						// 퀵메뉴 설정 확인
 						getQuickMenuSettings: () => ({
 							enabled: $('#copybot_quickmenu_toggle').attr('data-enabled') === 'true',
@@ -1063,13 +858,11 @@
 					}
 				});
 			}
-        } catch (error) {
-            console.error('깡갤 복사기: 모듈 로드 실패, 기본 함수 사용');
-        }
-        
+        });
+
         // 데이터 마이그레이션 실행 (UI 로드 전)
-        performDataMigration();
-        
+        safeInit('데이터 마이그레이션', performDataMigration);
+
         try {
             if ($("#extensions_settings2").length > 0) {
             // settings.html 내용을 수동으로 DOM에 삽입
@@ -1094,89 +887,36 @@
             
             // 모든 모듈이 초기화된 후 이벤트 핸들러 설정
                 setupEventHandlers();
-                
+
                 setTimeout(() => {
-					// 통합된 로딩 시스템 (순서 수정)
-					loadSettings(); // 프리셋 로딩도 여기서 자동 처리됨
-					loadTempPrompt();
-					addTempPromptField();
-					updateActionButtons();
-					loadGhostwriteProfiles();
-					
+					// 통합된 로딩 시스템 (순서 중요). 단계별로 격리 — 한 단계가 실패해도 다음 단계는 진행
+					safeInit('설정 로드', loadSettings); // 프리셋 로딩도 여기서 자동 처리됨
+					safeInit('임시 프롬프트 로드', loadTempPrompt);
+					safeInit('임시 대필칸', addTempPromptField);
+					safeInit('액션 버튼', updateActionButtons);
+					safeInit('대필 프로필 목록', loadGhostwriteProfiles);
+
 					// 프리셋 관련 UI 업데이트 (순서 중요!)
-					updatePresetDropdown();
-					updatePresetEditButtonState();
-					// 기능을 하나라도 쓰고 있을 때만 문서 스크롤 가드 설치 (전부 OFF 면 전역 리스너 없음)
-					window.copybot_ensureScrollGuard();
-					
-					// 🔥 핵심 수정: 안전한 초기값 동기화 (DOM 준비 상태 확인 + Fallback)
-						setTimeout(() => {
-							// ghostwrite 모듈을 통한 안전한 초기값 동기화
+					safeInit('프리셋 드롭다운', updatePresetDropdown);
+					safeInit('프리셋 편집 버튼', updatePresetEditButtonState);
+					// 기능을 하나라도 쓰고 있을 때만 문서 스크롤 가드·채팅 전환 재적용 설치 (전부 OFF 면 전역 리스너 없음)
+					safeInit('스크롤 가드', () => window.copybot_ensureScrollGuard());
+
+					// 안전한 초기값 동기화 (설정 로드가 끝난 뒤)
+					// 대필 지시문 칸의 삭제·잘라내기·붙여넣기·드롭 저장은 ui.js 의 input 핸들러(디바운스 저장)가 전부 받는다 — 별도 keyup/cut/paste/drop 핸들러 없음
+					setTimeout(() => {
+						safeInit('대필 초기값 동기화', () => {
 							if (window.CopyBotGhostwrite) {
 								window.CopyBotGhostwrite.syncInitialValues();
 								debugLog('🔄 ghostwrite 모듈 안전 초기화 완료');
 							} else {
 								debugLog('⚠️ ghostwrite 모듈 로드 대기 중, 기본 동작 유지');
 							}
-						
-						// 🔥 포괄적 삭제 감지: 모든 삭제 방법 대응 (안전한 방식)
-						const addComprehensiveDeletionHandlers = () => {
-							const textboxes = [
-								{ selector: '#copybot_ghostwrite_textbox', fieldName: 'basicPrompt' },
-								{ selector: '#copybot_ghostwrite_exclude_textbox', fieldName: 'excludePrompt' }
-							];
-							
-							textboxes.forEach(({selector, fieldName}) => {
-								const $element = $(selector);
-								if ($element.length === 0) return;
-								
-								// 1. 추가 키보드 이벤트 (기존 input과 중복되지 않는 보완)
-								$element.off('keyup.comprehensive').on('keyup.comprehensive', function(e) {
-									// Delete나 Backspace 키 후 즉시 확인
-									if (e.key === 'Delete' || e.key === 'Backspace') {
-										setTimeout(() => {
-											const currentValue = $(this).val() || '';
-											// hasValueChanged로 실제 변경 여부 확인 후 저장 (ghostwrite 모듈이 마지막 저장값을 관리)
-											if (hasValueChanged(fieldName, currentValue)) {
-												scheduleDebounceAutoSave(fieldName);
-												debugLog('🔧 keyup 보완 저장:', fieldName, currentValue);
-											}
-										}, 20);
-									}
-								});
-								
-								// 2. 잘라내기/붙여넣기 이벤트
-								$element.off('cut.comprehensive paste.comprehensive').on('cut.comprehensive paste.comprehensive', function(e) {
-									setTimeout(() => {
-										const currentValue = $(this).val() || '';
-										if (hasValueChanged(fieldName, currentValue)) {
-											scheduleDebounceAutoSave(fieldName);
-											debugLog('🔧 cut/paste 보완 저장:', fieldName, currentValue);
-										}
-									}, 50);
-								});
-								
-								// 3. 드래그 앤 드롭 감지
-								$element.off('drop.comprehensive').on('drop.comprehensive', function(e) {
-									setTimeout(() => {
-										const currentValue = $(this).val() || '';
-										if (hasValueChanged(fieldName, currentValue)) {
-											scheduleDebounceAutoSave(fieldName);
-											debugLog('🔧 drag&drop 보완 저장:', fieldName, currentValue);
-										}
-									}, 100);
-								});
-							});
-							
-							debugLog('🎯 포괄적 삭제 감지 핸들러 등록 완료 (Delete, Backspace, Cut, Paste, Drag&Drop)');
-						};
-						
-						// 포괄적 삭제 핸들러 등록
-						addComprehensiveDeletionHandlers();
+						});
 					}, 300);
-					
+
 					// 강화된 다중 시점 아이콘 업데이트 시도
-					scheduleIconUpdates();
+					safeInit('입력창 아이콘', scheduleIconUpdates);
 				}, 100);
 
                 $(document).off('.copybot_init');   // 초기화 재시도 리스너 해제
@@ -1216,14 +956,46 @@
         window.addEventListener('scroll', guard, { passive: true });
         guard();
     }
-    // 설정 패널의 토글 중 하나라도 ON 이거나 입력창 안내문 모드가 '기본'이 아니면 "사용 중"으로 본다
+    // 설정 패널의 기능 토글 중 하나라도 ON 이거나, 입력창 안내문 모드가 '기본'이 아니거나, 캡처 미리보기가 떠 있으면 "사용 중"으로 본다
+    // 안전장치·보조 토글(좆됨방지, 캡처 익명화, 디버그, 구 안내문 숨김)은 기본 ON 이거나 기능이 아니라서 판정에서 뺀다
+    // — 이걸 세면 전 옵션 OFF 여도 항상 true 가 돼 전역 리스너가 깔린다(미사용 시 무영향 위반)
+    const NON_FEATURE_TOGGLES = '#copybot_confirm_delete_toggle, #copybot_capture_anonymize_toggle, #copybot_debug_mode_toggle, #copybot_hide_placeholder_toggle';
     function isAnyFeatureOn() {
-        if ($('#copybot_settings .copybot_toggle_button[data-enabled="true"]').length > 0) return true;
+        if ($('#copybot_settings .copybot_toggle_button[data-enabled="true"]').not(NON_FEATURE_TOGGLES).length > 0) return true;
         const mode = $('#copybot_placeholder_mode').val();
-        return !!mode && mode !== 'off';
+        if (!!mode && mode !== 'off') return true;
+        return !!window.CopyBotCapture?.hasPreview?.();
     }
+
+    // 채팅 전환 뒤 재적용(임시 대필칸·입력창 아이콘·안내문) — 기능이 하나라도 ON 일 때만 1회 등록.
+    // 전부 OFF 가 된 뒤 채팅이 바뀌면 스스로 구독을 해제한다(남는 리스너 0).
+    let chatChangedHook = null;
+    function ensureChatChangedHook() {
+        if (chatChangedHook) return;
+        const context = window.SillyTavern?.getContext?.();
+        const eventName = context?.event_types?.CHAT_CHANGED;
+        if (!eventName || typeof context?.eventSource?.on !== 'function') return;
+        chatChangedHook = () => {
+            if (!isAnyFeatureOn()) {
+                try { context.eventSource.removeListener?.(eventName, chatChangedHook); } catch (e) { /* 무시 */ }
+                chatChangedHook = null;
+                return;
+            }
+            setTimeout(() => {
+                safeInit('임시 대필칸(채팅 전환)', addTempPromptField);
+                safeInit('임시 프롬프트 로드(채팅 전환)', loadTempPrompt);
+                // 아이콘·안내문도 안전한 방식으로 재적용
+                safeInit('입력창 아이콘(채팅 전환)', safeUpdateInputFieldIcons);
+                safeInit('입력창 안내문(채팅 전환)', safeApplyPlaceholderSetting);
+            }, 500);
+        };
+        context.eventSource.on(eventName, chatChangedHook);
+    }
+
     window.copybot_ensureScrollGuard = function() {
-        if (isAnyFeatureOn()) installWindowScrollGuard();
+        if (!isAnyFeatureOn()) return;
+        installWindowScrollGuard();
+        ensureChatChangedHook();
     };
 
     // 테마(body class) 변경 감시 — 입력창 아이콘·임시 대필칸이 실제로 있을 때만 관찰 (없으면 옵저버 해제)
@@ -1253,20 +1025,10 @@
     $(document).ready(function() {
         debugLog('깡갤 복사기: DOM 준비 완료');
         setTimeout(initialize, 1000);
-        
-        $(document).on('characterSelected chat_render_complete CHAT_CHANGED', () => {
-            setTimeout(() => { 
-                if (!isInitialized) initialize(); 
-                addTempPromptField();
-                loadTempPrompt();
-                // 이벤트 기반 아이콘 업데이트도 안전한 방식으로 변경
-                safeUpdateInputFieldIcons(); 
-                
-                // placeholder 설정 재적용 (안전한 방식)
-                safeApplyPlaceholderSetting();
-            }, 500);
-        });
-        
+
+        // 채팅 전환 뒤 재적용은 ensureChatChangedHook() 가 실리 eventSource(CHAT_CHANGED)로 처리한다
+        // (예전의 $(document).on('characterSelected chat_render_complete CHAT_CHANGED') 는 실리가 쏘지 않는 jQuery 이벤트라 제거)
+
         // 초기화 재시도용 리스너 — 초기화가 끝나면 해제한다 (initialize 끝에서 .copybot_init 네임스페이스 off)
         $(document).on('change.copybot_init', '#character_select', () => {
             setTimeout(() => { if (!isInitialized) initialize(); }, 200);

@@ -16,7 +16,13 @@
         },
 
         // === 메시지 범위 유틸리티 ===
-        
+
+        // 채팅이 비어 있는지 (getLastMessageIndex 는 빈 채팅에도 0 을 돌려주므로 0-0 범위가 검증을 통과해 버린다 → 명령을 보내기 전에 따로 확인)
+        isChatEmpty: function() {
+            const chat = window.SillyTavern?.getContext?.()?.chat;
+            return Array.isArray(chat) && chat.length === 0;
+        },
+
         // 메시지 인덱스 유효성 검사
         validateMessageIndices: function(startIndex, endIndex) {
             try {
@@ -184,6 +190,11 @@
                     return false;
                 }
 
+                if (this.isChatEmpty()) {
+                    toastr.warning('메시지가 없습니다.');
+                    return false;
+                }
+
                 // 인덱스 유효성 검사
                 if (!this.validateMessageIndices(startIndex, endIndex)) {
                     toastr.error('올바르지 않은 메시지 번호입니다.');
@@ -217,6 +228,11 @@
                 if (!utils || !commands) {
                     console.error('깡갤 복사기: 필요한 의존성이 없음 (utils, commands)');
                     toastr.error('메시지 보이기 기능을 사용할 수 없습니다.');
+                    return false;
+                }
+
+                if (this.isChatEmpty()) {
+                    toastr.warning('메시지가 없습니다.');
                     return false;
                 }
 
@@ -255,6 +271,11 @@
                 if (!utils || !commands) {
                     console.error('깡갤 복사기: 필요한 의존성이 없음 (utils, commands)');
                     toastr.error('다중 삭제 기능을 사용할 수 없습니다.');
+                    return false;
+                }
+
+                if (this.isChatEmpty()) {
+                    toastr.warning('메시지가 없습니다.');
                     return false;
                 }
 

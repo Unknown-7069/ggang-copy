@@ -11,6 +11,7 @@
     let captureCharRules = {};           // 캡처 캐릭터별 익명화 규칙 { key: [{from,to}] }
     let captureHideKinds = {};           // 캡처 캐릭터별 숨김(동적 블록) { key: { 'block:div.xxx': true } } — 숨기는 것만
     let captureHideGlobal = {};          // 캡처 공통 숨김(고정 종류 중 select 가 없는 것: frame/otherimg/details/table/code/quote) { kind: true }
+    let captureSeenKinds = {};           // 캡처 봇별 감지 기록 { key: [kind, ...] } — 요소 목록에 계속 보여 줄 종류
     let resizeStyleElement = null;
 
     // 전역 네임스페이스 생성
@@ -19,12 +20,33 @@
         // 설정 저장 (저사양 대비: 연속 호출을 200ms 로 묶어 localStorage 쓰기 횟수를 줄임)
         _saveTimer: null,
         saveSettings: function() {
+            this._ensurePagehideFlush();   // 첫 저장 예약 때 1회만 등록 (설정을 한 번도 안 바꾼 세션엔 전역 리스너 0)
             clearTimeout(this._saveTimer);
             this._saveTimer = setTimeout(() => {
                 this._saveTimer = null;
                 this.saveSettingsNow();
             }, 200);
             return true;
+        },
+
+        // 디바운스 중인 저장이 있으면 페이지를 떠나기 전에 반드시 기록 — 리스너는 첫 디바운스 예약 때 1회만 등록
+        _pagehideBound: false,
+        _ensurePagehideFlush: function() {
+            if (this._pagehideBound) return;
+            this._pagehideBound = true;
+            window.addEventListener('pagehide', () => {
+                if (window.copybot_resetting) return;   // 초기화 중엔 저장 금지
+                if (window.CopyBotSettings._saveTimer) {
+                    clearTimeout(window.CopyBotSettings._saveTimer);
+                    window.CopyBotSettings._saveTimer = null;
+                    window.CopyBotSettings.saveSettingsNow();
+                }
+            });
+        },
+
+        // 문자열이 JSON 객체로 파싱되는지 (백업에 깨진 문자열을 쓰지 않기 위한 검사)
+        _isJsonObject: function(str) {
+            try { const v = JSON.parse(str); return !!v && typeof v === 'object'; } catch (e) { return false; }
         },
 
         // 좆됨방지(삭제 전 재확인) 옵션 — 기본 ON("옵션 기본 OFF" 원칙의 명시적 예외, 2026-10-09 유저 결정).
@@ -37,9 +59,14 @@
         },
 
         // fail-closed: 설정 패널 DOM 이 있으면 그 값, 없으면 저장값, 그것도 못 읽으면 "확인한다"
+        // (토글 속성이 'true'/'false' 가 아닌 이상값이면 DOM 을 믿지 않고 저장값 → 기본 "확인" 으로 떨어진다)
         isConfirmDeleteEnabled: function() {
             const $t = $('#copybot_confirm_delete_toggle');
-            if ($t.length) return $t.attr('data-enabled') === 'true';
+            if ($t.length) {
+                const v = $t.attr('data-enabled');
+                if (v === 'false') return false;
+                if (v === 'true') return true;
+            }
             try {
                 const raw = localStorage.getItem('copybot_settings');
                 if (raw) return this.readConfirmDeleteFromMisc(JSON.parse(raw)?.misc);
@@ -117,6 +144,8 @@
                     keys.forEach(k => { store.removeItem(k); removed++; });
                 } catch (e) { /* 저장소 접근 불가 — 서버 사본만이라도 지운다 */ }
             }
+            // 새로고침 뒤 안전망 표식: 서버 저장이 새로고침 전에 끝나지 못해 실리 계정 사본이 남아 있으면 로드 때 한 번 더 지운다
+            try { sessionStorage.setItem('copybot_reset_pending', '1'); } catch (e) { /* 무시 */ }
             let serverDone = Promise.resolve();
             try {
                 const ctx = this._serverCtx();
@@ -125,10 +154,17 @@
                     if (typeof ctx.saveSettingsDebounced === 'function') {
                         serverDone = new Promise(resolve => {
                             let done = false;
+                            const started = Date.now();
                             const finish = () => { if (!done) { done = true; resolve(); } };
                             const ev = ctx.event_types?.SETTINGS_UPDATED;
-                            if (ev && typeof ctx.eventSource?.once === 'function') ctx.eventSource.once(ev, finish);   // 서버 저장 완료 신호
-                            setTimeout(finish, 4000);   // 안전망: 신호가 안 와도 새로고침은 한다
+                            const canOnce = ev && typeof ctx.eventSource?.once === 'function';
+                            // 실리는 저장을 1초 디바운스하므로, 그 전에 오는 SETTINGS_UPDATED 는 "직전 저장(우리 토글 등)"의 신호 → 한 번 더 기다린다
+                            const onUpdated = () => {
+                                if (!done && Date.now() - started < 1100 && canOnce) { ctx.eventSource.once(ev, onUpdated); return; }
+                                finish();
+                            };
+                            if (canOnce) ctx.eventSource.once(ev, onUpdated);   // 서버 저장 완료 신호
+                            setTimeout(finish, 4000);   // 안전망: 신호가 안 와도 새로고침은 한다 (남은 사본은 로드 때 표식으로 다시 지움)
                             ctx.saveSettingsDebounced();
                         });
                     }
@@ -146,6 +182,11 @@
         // 설정 즉시 저장 (페이지 떠날 때 등)
         saveSettingsNow: function() {
             try {
+                // 설정 패널 DOM 이 없으면 화면값이 없는 것 → 전부 기본값(좆됨방지 OFF 포함)으로 저장본을 덮지 않도록 저장하지 않는다
+                if (!document.getElementById('copybot_confirm_delete_toggle')) {
+                    window.CopyBotUtils?.debugLog(window.copybot_debug_mode, '설정 패널이 없어 저장 생략');
+                    return false;
+                }
                 const settings = {
                     ghostwrite: {
                         enabled: $('#copybot_ghostwrite_toggle').attr('data-enabled') === 'true',
@@ -202,7 +243,8 @@
                         scale: $('#copybot_capture_scale').val() || 'full',
                         layout: $('#copybot_capture_layout').val() || 'single',
                         hideKinds: captureHideKinds,
-                        hideGlobal: captureHideGlobal
+                        hideGlobal: captureHideGlobal,
+                        seenKinds: captureSeenKinds
                     },
                     ui: {
                         mode: $('#copybot_mode_toggle button.active').data('mode') || 'text',
@@ -245,6 +287,7 @@
 					},
 					misc: {
 						hqProfile: $('#copybot_hq_profile_toggle').attr('data-enabled') === 'true',
+						hqProfileList: $('#copybot_hq_profile_list').is(':checked'),   // 봇 목록에도 적용 (기본 OFF)
 						removeResize: $('#copybot_remove_resize_toggle').attr('data-enabled') === 'true',
 						debugMode: $('#copybot_debug_mode_toggle').attr('data-enabled') === 'true',
 						hidePlaceholder: window.CopyBotSettings.getPlaceholderMode() === 'hide',
@@ -264,10 +307,10 @@
                 if (window.copybot_resetting) return false;   // 초기화 진행 중 — 지운 값을 다시 쓰지 않는다
                 settings._savedAt = Date.now();   // 브라우저 저장본 vs 실리 계정 사본 중 최신 판별용
                 const json = JSON.stringify(settings);
-                // 백업 = 덮어쓰기 직전의 이전 저장본 (같은 값을 두 번 쓰면 백업이 아님)
+                // 백업 = 덮어쓰기 직전의 이전 저장본 (같은 값을 두 번 쓰면 백업이 아님). 이전 본 키가 깨진 문자열이면 좋은 백업을 덮지 않는다
                 let prev = null;
                 try { prev = localStorage.getItem('copybot_settings'); } catch (e) { /* 무시 */ }
-                if (prev && prev !== json) localStorage.setItem('copybot_settings_backup', prev);
+                if (prev && prev !== json && window.CopyBotSettings._isJsonObject(prev)) localStorage.setItem('copybot_settings_backup', prev);
                 localStorage.setItem('copybot_settings', json);
                 sessionStorage.setItem('copybot_settings_temp', json);
                 window.CopyBotSettings.writeServerCopy(json);   // 실리 계정에도 같은 내용(실패해도 브라우저 저장은 유지)
@@ -292,7 +335,8 @@
             if (hidden) captureHideGlobal[kind] = true;
             else delete captureHideGlobal[kind];
         },
-        // 캐릭터별(동적 블록) (키: 캐릭터 아바타 파일명 / 그룹 id): { key: { kind: true } } — 숨기는 것만 저장
+        // 캐릭터별 (키: 캐릭터 아바타 파일명 / 그룹 id): { key: { kind: true } } — 숨기는 것만 저장.
+        // 봇 전용 블록은 종류 id 그대로('block:…'), 고정 종류를 이 봇에서만 뺄 때는 'bot:종류'(capture.js BOT_PIN_PREFIX)
         getCaptureHideKinds: function(key) {
             const v = captureHideKinds[key];
             return (v && typeof v === 'object') ? { ...v } : {};
@@ -306,14 +350,37 @@
             else delete captureHideKinds[key];
         },
 
+        // 봇별 감지 기록 (키: 위와 같음): { key: [kind, ...] } — 요소 목록에 계속 보여 줄 종류. 유저가 지울 수 있다
+        getCaptureSeenKinds: function(key) {
+            const v = captureSeenKinds[key];
+            return Array.isArray(v) ? v.filter(k => typeof k === 'string' && k) : [];
+        },
+        // 새로 더해진 것이 있으면 true (저장이 필요한지 알려 줌). 봇 하나에 최대 60개, 넘치면 오래된 것부터 버림
+        addCaptureSeenKinds: function(key, kinds) {
+            if (!key || !Array.isArray(kinds)) return false;
+            const list = this.getCaptureSeenKinds(key);
+            let changed = false;
+            kinds.forEach(k => { if (typeof k === 'string' && k && !list.includes(k)) { list.push(k); changed = true; } });
+            if (changed) captureSeenKinds[key] = list.slice(-60);
+            return changed;
+        },
+        removeCaptureSeenKind: function(key, kind) {
+            if (!key || !kind) return;
+            const list = this.getCaptureSeenKinds(key).filter(k => k !== kind);
+            if (list.length) captureSeenKinds[key] = list;
+            else delete captureSeenKinds[key];
+        },
+
         // === 캡처 캐릭터별 익명화 규칙 저장소 (키: 캐릭터 아바타 파일명 / 그룹 id) ===
         getCaptureCharRules: function(key) {
             return Array.isArray(captureCharRules[key]) ? captureCharRules[key] : [];
         },
         // 현재 열린 캐릭터의 규칙을 화면에서 읽어 저장소에 반영한 뒤 전체 맵 반환
+        // (화면 목록이 아직 이전 캐릭터 것이면 — 전환 직후 갱신 전 — 읽지 않는다. 이전 캐릭터 규칙이 새 캐릭터 키로 복사되는 것 방지)
         collectCaptureCharRules: function() {
             const key = window.CopyBotCapture?.currentCharKey?.();
-            if (key && window.CopyBotUI?.readCaptureRules) {
+            const listKey = $('#copybot_capture_rules_char').attr('data-char-key');
+            if (key && window.CopyBotUI?.readCaptureRules && (!listKey || listKey === key)) {
                 const rules = window.CopyBotUI.readCaptureRules('char');
                 if (rules.length) captureCharRules[key] = rules;
                 else delete captureCharRules[key];
@@ -326,12 +393,17 @@
             const slots = [];
             $('#copybot_custom_slots .copybot_custom_slot').each(function() {
                 const $slot = $(this);
+                const raw = String($slot.find('.copybot_custom_action').val() || '');
+                const action = raw.startsWith('st_menu:') ? 'st_menu' : raw;      // 드롭다운 값 "st_menu:<메뉴>" → 저장은 동작 id + link
+                const link = (action === 'st_menu' || action === 'qr_set') ? ($slot.data('link') || null) : null;
                 slots.push({
-                    action: $slot.find('.copybot_custom_action').val() || '',
+                    action,
                     iconClass: $slot.find('.copybot_icon_picker').data('icon') || '',
+                    iconCustom: $slot.find('.copybot_icon_picker').data('customized') === true,   // 유저가 직접 고른 아이콘은 대상이 바뀌어도 그대로
                     submenu: $slot.find('.copybot_custom_submenu').is(':checked'),
                     inputfield: $slot.find('.copybot_custom_inputfield').is(':checked'),
-                    position: $slot.find('.copybot_custom_position').val() || 'bottom_left'
+                    position: $slot.find('.copybot_custom_position').val() || 'bottom_left',
+                    link
                 });
             });
             return slots;
@@ -406,9 +478,33 @@
                 }
                 // 실리 계정(서버) 사본: 브라우저 저장본이 없거나(기기 교체·사이트 데이터 삭제) 전부 깨졌거나, 서버 쪽이 더 최근이면 그쪽을 쓴다.
                 // 타임스탬프 없는 구버전 브라우저 저장본은 이 기기의 최신 상태로 보고 그대로 쓴다(다음 저장 때 타임스탬프와 서버 사본이 생김).
-                const picked = window.CopyBotSettings.pickLatestSettings(settings, window.CopyBotSettings.readServerCopy());
+                // 전체 초기화 직후 새로고침: 서버 저장이 늦어 실리 계정 사본이 남아 있으면 여기서 한 번 더 지운다 (초기화가 되돌아오지 않게)
+                let resetPending = false;
+                try { resetPending = sessionStorage.getItem('copybot_reset_pending') === '1'; if (resetPending) sessionStorage.removeItem('copybot_reset_pending'); } catch (e) { /* 무시 */ }
+                if (resetPending) {
+                    try {
+                        const c = window.CopyBotSettings._serverCtx();
+                        if (c && Object.prototype.hasOwnProperty.call(c.extensionSettings, window.CopyBotSettings.SERVER_KEY)) {
+                            delete c.extensionSettings[window.CopyBotSettings.SERVER_KEY];
+                            if (typeof c.saveSettingsDebounced === 'function') c.saveSettingsDebounced();
+                            window.CopyBotUtils?.debugLog(window.copybot_debug_mode, '초기화 뒤 남아 있던 실리 계정 사본을 지움');
+                        }
+                    } catch (e) { /* 무시 */ }
+                }
+                const picked = window.CopyBotSettings.pickLatestSettings(settings, resetPending ? null : window.CopyBotSettings.readServerCopy());
                 if (picked.source === 'server') { settings = picked.settings; sourceName = 'server'; }
                 window.CopyBotUtils?.debugLog(window.copybot_debug_mode, `설정 소스: ${sourceName || '없음'}`);
+                // 본 키가 아닌 소스(백업·세션·서버)로 복구했으면 본 키(+세션)도 그 내용으로 맞춘다 — presets.js 등 본 키만 읽는 쪽이 깨진·옛 값을 쓰지 않게.
+                // 백업 키는 건드리지 않는다(깨진 본 키를 백업에 쓰지 않기 위해).
+                if (settings && sourceName && sourceName !== 'copybot_settings') {
+                    try {
+                        const json = JSON.stringify(settings);
+                        localStorage.setItem('copybot_settings', json);
+                        sessionStorage.setItem('copybot_settings_temp', json);
+                        delete window.copybotIntegratedPresets;   // presets.js 프리셋 캐시 무효화 (본 키 기준으로 다시 읽게)
+                        window.CopyBotUtils?.debugLog(window.copybot_debug_mode, `설정 본 키를 ${sourceName} 내용으로 복구`);
+                    } catch (e) { /* 저장소 불가 — 다음 저장에 맡김 */ }
+                }
                 window.copybot_settings_load_failed = false;
                 if (!settings) {
                     if (anyStored) {
@@ -468,7 +564,7 @@
                     $('#copybot_temp_field_toggle').attr('data-enabled', useTempField).text(useTempField ? 'ON' : 'OFF');
                     
                     // 토글 상태에 따라 모든 관련 UI를 제어
-                    const ghostwriteElements = $('#copybot_ghostwrite_position_options, #copybot_ghostwrite_panel .copybot_description, #copybot_ghostwrite_textbox, #copybot_ghostwrite_exclude_container');
+                    const ghostwriteElements = $('#copybot_ghostwrite_position_options, #copybot_ghostwrite_panel .copybot_ghostwrite_help, #copybot_ghostwrite_textbox, #copybot_ghostwrite_exclude_container');
                     if (isGhostwriteEnabled) {
                         ghostwriteElements.show();
                     } else {
@@ -566,6 +662,8 @@
                 $('#copybot_capture_layout').val(settings.capture?.layout === 'split' ? 'split' : 'single');
                 captureHideKinds = (settings.capture?.hideKinds && typeof settings.capture.hideKinds === 'object') ? settings.capture.hideKinds : {};
                 captureHideGlobal = (settings.capture?.hideGlobal && typeof settings.capture.hideGlobal === 'object') ? settings.capture.hideGlobal : {};
+                // 예전 저장본에는 없는 키 → 빈 기록으로 시작 (감지되는 대로 쌓임)
+                captureSeenKinds = (settings.capture?.seenKinds && typeof settings.capture.seenKinds === 'object' && !Array.isArray(settings.capture.seenKinds)) ? settings.capture.seenKinds : {};
                 // 마지막 캡처 기록(같은 채팅이면 캡처 모드 진입 시 미리보기 자동 표시)
                 if (window.CopyBotCapture) {
                     const lr = settings.ui?.lastCaptureRange;
@@ -630,8 +728,11 @@
                     if (callbacks?.setDebugMode) callbacks.setDebugMode(window.copybot_debug_mode);   // 모듈별 내부 플래그도 저장값으로
 
                     $('#copybot_hq_profile_toggle').attr('data-enabled', hqProfileEnabled).text(hqProfileEnabled ? 'ON' : 'OFF');
+                    // "봇 목록에도 적용"(2026-10-11 추가, 기본 OFF). 이 키가 없는 예전 저장본은 그때 동작(고화질 ON = 목록까지 적용)을 그대로 잇는다
+                    const hqProfileListEnabled = typeof settings.misc.hqProfileList === 'boolean' ? settings.misc.hqProfileList : hqProfileEnabled;
+                    $('#copybot_hq_profile_list').prop('checked', hqProfileListEnabled);
+                    $('#copybot_hq_profile_options').toggle(hqProfileEnabled);
                     $('#copybot_remove_resize_toggle').attr('data-enabled', removeResizeEnabled).text(removeResizeEnabled ? 'ON' : 'OFF');
-                    $('#copybot_hide_placeholder_toggle').attr('data-enabled', hidePlaceholderEnabled).text(hidePlaceholderEnabled ? 'ON' : 'OFF');
                     $('#copybot_confirm_delete_toggle').attr('data-enabled', confirmDeleteEnabled).text(confirmDeleteEnabled ? 'ON' : 'OFF');
 
                     // 입력창 안내문 모드 (구버전 hidePlaceholder → 'hide' 로 이행)
@@ -678,6 +779,23 @@
 						$('#copybot_quickmenu_icon_position').val(settings.quickMenu.inputIconPosition);
 					}
 					
+					// 아이콘 클래스는 퀵메뉴 ON/OFF 와 무관하게 항상 복원 (OFF 인 채 저장하면 아이콘이 기본값으로 덮이던 문제 — §2-6 아이콘 보존)
+					// 마법봉 아이콘 (구버전 기본값 fa-clipboard 는 새 기본값 fa-scroll 로 이관 — 예전엔 고를 수 없던 기본이었으므로)
+					if (settings.quickMenu.wandIconClass) {
+						const wandIcon = settings.quickMenu.wandIconClass === 'fa-clipboard' ? 'fa-scroll' : settings.quickMenu.wandIconClass;
+						$('#copybot_quickmenu_wand_icon_picker')
+							.removeClass()
+							.addClass(`fa-solid ${wandIcon} copybot_icon_picker copybot_inline_icon_picker`)
+							.data('icon', wandIcon);
+					}
+					// 입력필드 아이콘
+					if (settings.quickMenu.inputIconClass) {
+						$('#copybot_quickmenu_input_icon_picker')
+							.removeClass()
+							.addClass(`fa-solid ${settings.quickMenu.inputIconClass} copybot_icon_picker copybot_inline_icon_picker`)
+							.data('icon', settings.quickMenu.inputIconClass);
+					}
+
 					// 퀵메뉴 ON/OFF에 따른 접근방식 옵션 표시/숨김
 					if (isQuickMenuEnabled) {
 						$('#copybot_quickmenu_access_options').show();
@@ -690,25 +808,6 @@
 						// 마법봉 체크 시 아이콘 피커 표시
 						if (settings.quickMenu.accessWand) {
 							$('#copybot_quickmenu_wand_icon_picker').show();
-						}
-
-						// 마법봉 아이콘 클래스 로드 (구버전 기본값 fa-clipboard 는 새 기본값 fa-scroll 로 이관 — 예전엔 고를 수 없던 기본이었으므로)
-						if (settings.quickMenu.wandIconClass) {
-							const wandIcon = settings.quickMenu.wandIconClass === 'fa-clipboard' ? 'fa-scroll' : settings.quickMenu.wandIconClass;
-							const $wandPicker = $('#copybot_quickmenu_wand_icon_picker');
-							$wandPicker
-								.removeClass()
-								.addClass(`fa-solid ${wandIcon} copybot_icon_picker copybot_inline_icon_picker`)
-								.data('icon', wandIcon);
-						}
-
-						// 입력필드 아이콘 클래스 로드
-						if (settings.quickMenu.inputIconClass) {
-							const $inputPicker = $('#copybot_quickmenu_input_icon_picker');
-							$inputPicker
-								.removeClass()
-								.addClass(`fa-solid ${settings.quickMenu.inputIconClass} copybot_icon_picker copybot_inline_icon_picker`)
-								.data('icon', settings.quickMenu.inputIconClass);
 						}
 					} else {
 						$('#copybot_quickmenu_access_options').hide();
@@ -763,6 +862,9 @@
                 }
             } catch (error) {
                 console.error('깡갤 복사기: 설정 로드 실패', error);
+                // 화면에 반만 적용된 상태(나머지는 HTML 기본값)로 저장하면 기존 저장본이 기본값으로 덮인다 → 이번 세션 저장 차단
+                window.copybot_settings_load_failed = true;
+                try { toastr.error('복사기 설정을 화면에 적용하지 못해 이번에는 저장을 막아 두었습니다. 페이지를 새로고침해 주십시오.', '', { timeOut: 8000 }); } catch (e) { /* 무시 */ }
             }
         },
 
@@ -949,8 +1051,14 @@
             placeholderObserver.observe(textarea, { attributes: true, attributeFilter: ['placeholder'] });
         },
 
-        // 실리 기본 안내문 알아내기 (기억해 둔 원본 → 없으면 data-i18n 의 connected_text 를 실리 번역기로)
+        // 실리 기본 안내문 알아내기: 실리가 입력창에 달아 둔 connected_text/no_connection_text 속성(번역 적용값, 1.19 확인) → 기억해 둔 원본 → data-i18n 의 영문을 실리 번역기로
         _defaultPlaceholderText: function(textarea) {
+            try {
+                const ctx = window.SillyTavern?.getContext?.();
+                const attr = ctx?.onlineStatus === 'no_connection' ? 'no_connection_text' : 'connected_text';
+                const fromAttr = textarea.getAttribute(attr);
+                if (fromAttr) return fromAttr;
+            } catch (e) { /* 아래 폴백 */ }
             if (lastKnownPlaceholder) return lastKnownPlaceholder;
             try {
                 const i18n = textarea.getAttribute('data-i18n') || '';
@@ -985,6 +1093,8 @@
         // 안전한 placeholder 적용 함수 (타이밍 이슈 해결)
         safeApplyPlaceholderSetting: function() {
             const mode = this.getPlaceholderMode();
+            // '기본' 모드이고 우리가 건드린 흔적도 없으면 할 일이 없다 → 입력창을 찾는 재시도 타이머도 돌리지 않음 (미사용 시 무영향)
+            if (mode === 'off' && placeholderOverrideValue === null && !placeholderStyleElement && !placeholderObserver) return;
 
             // DOM 요소가 준비될 때까지 재시도
             const applyWithRetry = (attempts = 0) => {
@@ -1007,16 +1117,6 @@
             applyWithRetry();
         }
     };
-
-    // 디바운스 중인 저장이 있으면 페이지를 떠나기 전에 반드시 기록
-    window.addEventListener('pagehide', () => {
-        if (window.copybot_resetting) return;   // 초기화 중엔 저장 금지
-        if (window.CopyBotSettings._saveTimer) {
-            clearTimeout(window.CopyBotSettings._saveTimer);
-            window.CopyBotSettings._saveTimer = null;
-            window.CopyBotSettings.saveSettingsNow();
-        }
-    });
 
     if (window.copybot_debug_mode) {
         console.log('CopyBotSettings 모듈 로드 완료');

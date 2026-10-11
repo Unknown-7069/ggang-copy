@@ -24,6 +24,17 @@
 
     // 동작 정의 (id 는 설정에 저장되므로 변경 금지)
     const ACTIONS = [
+        // 바로가기 2종 (shortcut.js): 드롭다운에는 ui.js 가 "실리 메뉴" 묶음·QR 항목으로 따로 넣으므로 hidden. 슬롯의 link 가 대상을 담는다
+        {
+            id: 'st_menu', label: '실리 메뉴', icon: 'fa-bars', hidden: true,
+            desc: '실리 상단 메뉴 열기, 또는 프리셋·프로필·월드 인포·페르소나·봇 바로 바꾸기·확장 연결',
+            run: (env) => window.CopyBotShortcut ? window.CopyBotShortcut.run('st_menu', env) : (toastr.warning('바로가기 모듈을 불러오지 못했습니다.'), false),
+        },
+        {
+            id: 'qr_set', label: 'QR(빠른 답장)', icon: 'fa-reply', hidden: true,
+            desc: '고른 QR 세트를 버튼 위 팝업으로 열어 하나를 골라 실행, 또는 고른 QR 하나를 바로 실행',
+            run: (env) => window.CopyBotShortcut ? window.CopyBotShortcut.run('qr_set', env) : (toastr.warning('바로가기 모듈을 불러오지 못했습니다.'), false),
+        },
         {
             id: 'send_no_reply', label: '응답 없이 보내기', icon: 'fa-paper-plane',
             desc: '입력창 내용을 유저 메시지로만 추가하고 AI 응답은 요청하지 않음 (/send)',
@@ -70,19 +81,33 @@
         {
             id: 'jump_last_top', label: '마지막 메시지 최상단으로', icon: 'fa-arrow-down-short-wide',
             desc: '마지막 메시지의 첫 줄이 화면 맨 위에 오도록 이동',
-            run: () => window.CopyBotCommands?.jumpToMessage('last', null),
+            run: () => window.CopyBotCommands?.jumpToMessage('last', '마지막 메시지로 이동했습니다.'),
         },
         {
             id: 'jump_first', label: '첫 메시지로', icon: 'fa-angles-up',
             desc: '채팅 맨 처음으로 이동 (긴 채팅은 로딩 시간 소요)',
-            run: () => window.CopyBotCommands?.jumpToMessage(0, null),
+            // 확인창은 필수(2026-10-11 유저 확정). 여기 한 곳에만 둔다 → 설정 패널·퀵메뉴·플로팅·커스텀 버튼 어느 창구로 눌러도 똑같이 묻는다
+            run: () => {
+                if (!confirm('첫 메시지로 이동합니다.\n\n채팅이 많을 경우 렉이 발생할 수 있습니다.\n정말 이동하시겠습니까?')) {
+                    toastr.info('이동이 취소되었습니다.');
+                    return false;
+                }
+                return window.CopyBotCommands?.jumpToMessage(0, '첫 메시지로 이동했습니다.');
+            },
         },
         {
             id: 'jump_bottom', label: '맨 아래로', icon: 'fa-angles-down',
             desc: '채팅 맨 아래(가장 최근 글 끝)로 스크롤',
             run: () => {
+                // 커스텀 테마는 스크롤 컨테이너가 #chat 이 아닐 수 있다 → #chat 과 그 조상 중 실제로 스크롤되는(overflow-y auto/scroll) 첫 요소를 내린다
                 const chat = document.querySelector('#chat');
-                if (chat) chat.scrollTop = chat.scrollHeight;
+                if (!chat) return;
+                let scroller = null;
+                for (let el = chat; el && el.nodeType === 1 && el !== document.body && el !== document.documentElement; el = el.parentElement) {   // 문서(body/html)는 건드리지 않음
+                    const overflowY = getComputedStyle(el).overflowY;
+                    if (overflowY === 'auto' || overflowY === 'scroll') { scroller = el; break; }
+                }
+                (scroller || chat).scrollTop = (scroller || chat).scrollHeight;
             },
         },
         {
@@ -115,12 +140,19 @@
         {
             id: 'continue_last', label: '이어쓰기', icon: 'fa-forward',
             desc: '마지막 메시지 번호 안에서 그 뒤를 더 길게 이어 쓰게 함 — 새 메시지가 생기지 않음 (/continue)',
-            run: () => window.CopyBotCommands?.executeSilentCommand('/continue', null),
+            run: () => {
+                if (window.CopyBotGeneration?.isBusy?.()) {
+                    toastr.info('응답 생성 중입니다. 끝난 뒤 다시 눌러 주십시오.', '', { timeOut: 1500 });
+                    return false;
+                }
+                return window.CopyBotCommands?.executeSilentCommand('/continue', null);
+            },
         },
         {
             id: 'hide_last', label: '마지막 메시지 숨기기', icon: 'fa-eye-slash',
             desc: '마지막 메시지를 AI 가 못 보게 숨김 (/hide)',
             run: () => {
+                if (!ctx()?.chat?.length) { toastr.warning('숨길 메시지가 없습니다.'); return; }
                 const idx = lastIndex();
                 return window.CopyBotMessageOperations?.executeHideCommand(idx, idx);
             },
@@ -138,7 +170,7 @@
                 for (let i = chat.length - 1; i >= 0; i--) {
                     if (!chat[i].is_user && !chat[i].is_system) {
                         const ok = await window.CopyBotCommands?.writeToClipboard(chat[i].mes || '');
-                        toastr[ok ? 'success' : 'error'](ok ? `#${i} 봇 메시지를 복사했습니다.` : '클립보드 복사 실패', '', { timeOut: 1500 });
+                        toastr[ok ? 'success' : 'error'](ok ? `#${i} 봇 메시지를 복사했습니다.` : '클립보드 복사에 실패했습니다.', '', { timeOut: 1500 });
                         return ok;
                     }
                 }
@@ -157,17 +189,19 @@
         label: (id) => BY_ID[id]?.label || id,
 
         // 동작 실행 (모든 접근 경로가 이 함수를 통함)
-        run: async function(id) {
+        // slotIndex/anchor 는 커스텀 버튼에서만 넘어온다 — 바로가기 동작(st_menu/qr_set)이 슬롯의 link 와 누른 버튼(팝업 기준점)을 쓴다
+        run: async function(id, slotIndex, anchor) {
             const action = BY_ID[id];
             if (!action) {
-                toastr.warning(`알 수 없는 동작: ${id}`);
+                toastr.warning(`알 수 없는 동작입니다: ${id}`);
                 return false;
             }
             try {
-                return await action.run();
+                const slot = Number.isInteger(slotIndex) ? (window.CopyBotActions.getEnabledSlots().find(s => s.index === slotIndex) || null) : null;
+                return await action.run({ slot, anchor: anchor || null });
             } catch (error) {
                 console.error(`깡갤 복사기: 동작 실행 실패 (${id})`, error);
-                toastr.error(`동작 실행 중 오류: ${action.label}`);
+                toastr.error(`동작 실행 중 오류가 났습니다: ${action.label}`);
                 return false;
             }
         },
@@ -179,13 +213,19 @@
             const slots = [];
             $('#copybot_custom_slots .copybot_custom_slot').each(function() {
                 const $slot = $(this);
-                const actionId = $slot.find('.copybot_custom_action').val();
+                const raw = String($slot.find('.copybot_custom_action').val() || '');
+                const actionId = raw.startsWith('st_menu:') ? 'st_menu' : raw;      // 드롭다운 값 "st_menu:<메뉴>" → 동작 id 는 st_menu
                 if (!actionId || !BY_ID[actionId]) return;
+                const isShortcut = actionId === 'st_menu' || actionId === 'qr_set';
+                const link = isShortcut ? ($slot.data('link') || null) : null;
+                if (isShortcut && !link) return;                                     // 고르기를 끝내지 않은 바로가기는 버튼을 만들지 않음
+                const d = isShortcut ? (window.CopyBotShortcut?.describe(actionId, link) || null) : null;
                 slots.push({
                     index: Number($slot.attr('data-slot')),
                     action: actionId,
-                    label: BY_ID[actionId].label,
-                    iconClass: $slot.find('.copybot_icon_picker').data('icon') || BY_ID[actionId].icon,
+                    link,
+                    label: d ? d.label : BY_ID[actionId].label,
+                    iconClass: $slot.find('.copybot_icon_picker').data('icon') || (d ? d.icon : BY_ID[actionId].icon),
                     submenu: $slot.find('.copybot_custom_submenu').is(':checked'),
                     inputfield: $slot.find('.copybot_custom_inputfield').is(':checked'),
                     position: $slot.find('.copybot_custom_position').val() || 'bottom_left',

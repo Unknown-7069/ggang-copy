@@ -13,7 +13,7 @@
 //
 // === 🔗 의존성 ===
 // • vendor/modern-screenshot.js (MIT, 동봉) — window.modernScreenshot. 없으면 안내 후 중단
-// • commands.js(jumpToMessage: 안 그려진 과거 메시지 로드용)
+// • 실리 기본 명령 /chat-jump 직접 실행(executeSlashCommandsWithOptions: 안 그려진 과거 메시지 로드용)
 // ===================================================================
 
 (function() {
@@ -106,7 +106,7 @@
     }
 
     // 범위의 메시지가 DOM 에 없으면(지연 로딩) 실리의 chat-jump 로 로드한 뒤 스크롤 원복
-    async function ensureRendered(start) {
+    async function ensureMessageRendered(start) {
         const el = document.querySelector(`#chat .mes[mesid="${start}"]`);
         if (el) return true;
         const chat = document.querySelector('#chat');
@@ -126,6 +126,28 @@
             restore();
         }
         return !!document.querySelector(`#chat .mes[mesid="${start}"]`);
+    }
+
+    // /chat-jump·fixChatOrder 로 메시지가 다시 그려지거나 옮겨지면 상태창 iframe 이 재로드된다 — 그 사이에 스냅샷하면 빈 상태창이 찍힘.
+    // 메시지 안 iframe 들이 다 그려질 때까지(문서 완료 + body 에 내용) 150ms 간격으로 최대 timeoutMs 기다린다. 접근 불가(다른 출처) 프레임은 준비된 것으로 본다.
+    async function waitForFrames(mes, timeoutMs = 2500) {
+        if (!mes) return true;
+        const frames = [...mes.querySelectorAll('iframe')];
+        if (!frames.length) return true;
+        const ready = (f) => {
+            let doc;
+            try { doc = f.contentDocument; } catch (e) { return true; }
+            if (!doc) return true;   // 다른 출처: 기다려도 못 읽음
+            return doc.readyState === 'complete' && !!doc.body && doc.body.childElementCount > 0;
+        };
+        const until = Date.now() + timeoutMs;
+        while (Date.now() < until) {
+            if (captureState?.aborted) return false;
+            if (frames.every(f => !f.isConnected || ready(f))) return true;
+            await new Promise(r => setTimeout(r, 150));
+        }
+        debugLog('상태창 프레임 대기 시간 초과 → 지금 상태로 스냅샷');
+        return false;
     }
 
     // 실리 1.19.0 버그 방어 (2026-10-09 폰에서 확인): printMessages 가 "Show more messages" 버튼을 #chat 맨 아래에 append 하고 CSS order:-1 로 위에
@@ -578,14 +600,15 @@
 
     // ===== 시각 요소 종류(kind) =====
     // 캡처에서 숨길 수 있는 요소 종류. 고정 종류 외에 본문(.mes_text) 최상위의 클래스 있는 블록은 'block:태그.클래스' 로 동적 추가.
-    // 고정 종류(미리 알 수 있는 분류)의 숨김은 공통(모든 봇) 설정, 동적 블록의 숨김은 캐릭터별 설정으로 저장된다.
+    // 빼기는 세 층: 이번 미리보기만(저장 안 함) / 이 봇에서 항상 / 모든 봇에서 항상(고정 종류만, ⚙ 캡처 옵션과 같은 값). 아래 "숨김 종류 계산" 참고.
     const GENIMG_SELECTORS = ['.mes_img', '.mes_img_container', '.mes_media_container', '.mes_media_wrapper', '.mes_video_container'];
     const ASSET_SELECTORS = ['[class*="characterImage"]', '[class*="imageWrapper"]', 'img[src^="/characters/"]', 'img[src^="characters/"]'];
+    const MEDIA_CONTAINER_SELECTOR = GENIMG_SELECTORS.concat(ASSET_SELECTORS).join(',');
     const KIND_DEFS = [
         { id: 'frame',    label: 'HTML 프레임(기타)',   test: el => el.tagName === 'IFRAME' },
         { id: 'genimg',   label: '자동 생성 이미지',    test: el => matchesAny(el, GENIMG_SELECTORS) },
         { id: 'asset',    label: '캐릭터 에셋 이미지',  test: el => matchesAny(el, ASSET_SELECTORS) && !el.closest('.mesAvatarWrapper, .avatar') },   // 프사는 에셋이 아님(표시 요소 옵션 담당)
-        { id: 'otherimg', label: '기타 이미지·영상',   test: el => /^(IMG|VIDEO|PICTURE|CANVAS)$/.test(el.tagName) && !el.closest('.mesAvatarWrapper, .avatar') && !el.classList.contains('copybot_inlined_frame') },
+        { id: 'otherimg', label: '기타 이미지·영상',   test: el => /^(IMG|VIDEO|PICTURE|CANVAS)$/.test(el.tagName) && !el.closest('.mesAvatarWrapper, .avatar') && !el.classList.contains('copybot_inlined_frame') && !el.closest(MEDIA_CONTAINER_SELECTOR) },   // 자동 생성 이미지·에셋 컨테이너 안 img/video 는 그 종류가 담당
         { id: 'stat',     label: '상태창',              test: el => isStatusLike(el) },
         { id: 'details',  label: '접기(펼치기) 블록',  test: el => el.tagName === 'DETAILS' },
         { id: 'table',    label: '표',                  test: el => el.tagName === 'TABLE' },
@@ -621,6 +644,7 @@
     }
 
     function kindLabel(id) {
+        id = String(id || '');
         if (KIND_LABELS[id]) return KIND_LABELS[id];
         if (id.startsWith('block:')) return `블록 <${id.slice(6)}>`;
         return id;
@@ -692,6 +716,7 @@
             wrapper.remove();
         };
         for (let i = 0; i < cloneFrames.length && i < origFrames.length; i++) {
+            if (captureState?.aborted) throw new Error('중단했습니다.');
             const src = origFrames[i];
             const target = cloneFrames[i];
             try {
@@ -832,7 +857,7 @@
                         applyTags(cloned);
                         applyRoleInline(cloned, readShowSettings());
                         // 호버 시에만 보이는 요소들이 캡처에 찍히지 않도록
-                        cloned.querySelectorAll('[class*="hover"], .mes_hover').forEach(el => { el.style.visibility = 'hidden'; });
+                        cloned.querySelectorAll('[class*="hover"], .mes_hover').forEach(el => { if (!el.closest('.mes_text')) el.style.visibility = 'hidden'; });   // 본문 안 요소(글 속 hover 클래스)는 그대로
                         // 시각적 정규식/HTML 렌더 확장이 만든 iframe(상태창 등)은 복제만으론 속이 비어 찍힘 → 안쪽 문서를 따로 그려 이미지로 치환
                         await inlineIframes(lib, mes, cloned, rules, scale, null);
                     }
@@ -974,7 +999,18 @@
     function blobToDataUrl(blob) {
         return new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result)); fr.onerror = () => reject(fr.error); fr.readAsDataURL(blob); });
     }
+    // 죽은 호스트 하나가 렌더 전체를 몇 분씩 붙잡지 않도록 요청마다 시간 제한 (중단 버튼을 눌러도 다음 요청부터 바로 멈춤)
+    async function fetchWithTimeout(url, init = {}, ms = 8000) {
+        const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+        const timer = ctrl ? setTimeout(() => { try { ctrl.abort(); } catch (e) { /* 무시 */ } }, ms) : null;
+        try {
+            return await fetch(url, ctrl ? { ...init, signal: ctrl.signal } : init);
+        } finally {
+            if (timer) clearTimeout(timer);
+        }
+    }
     async function fetchImageWithFallback(url) {
+        if (captureState?.aborted) throw new Error('중단했습니다.');
         if (!imageFetchStats) beginImageFetchStats();
         const stats = imageFetchStats;
         if (!url || /^(data|blob):/i.test(url)) return null;                // 라이브러리가 그대로 처리
@@ -983,12 +1019,12 @@
         if (stats.cache.has(u.href)) return stats.cache.get(u.href);
         let result = null;
         try {
-            const r = await fetch(u.href, { mode: 'cors', credentials: 'omit' });
+            const r = await fetchWithTimeout(u.href, { mode: 'cors', credentials: 'omit' });
             if (r.ok) { const b = await r.blob(); if (b.size > 0) { result = await blobToDataUrl(b); stats.direct++; } }
         } catch (e) { /* 아래 프록시로 */ }
         if (!result && !proxyDisabled) {
             try {
-                const r = await fetch('/proxy/' + u.href, { credentials: 'same-origin' });
+                const r = await fetchWithTimeout('/proxy/' + u.href, { credentials: 'same-origin' });
                 if (r.status === 403) proxyDisabled = true;
                 else if (r.ok) { const b = await r.blob(); if (b.size > 0) { result = await blobToDataUrl(b); stats.proxied++; } }
             } catch (e) { /* 실패 */ }
@@ -999,7 +1035,8 @@
     }
     // 라이브러리 렌더 옵션 공통 묶음 (모든 domToCanvas/domToDataUrl 호출이 이걸 쓴다)
     function libOptions(extra) {
-        return { ...extra, fetchFn: fetchImageWithFallback, fetch: { requestInit: { mode: 'cors', credentials: 'same-origin' }, placeholderImage: IMG_PLACEHOLDER } };
+        // restoreScrollPosition: 안에서 스크롤된 상자(상태창 등)를 라이브처럼 그 위치로 그림 (미리보기 = 결과물). 폰 확인 필요
+        return { ...extra, fetchFn: fetchImageWithFallback, fetch: { requestInit: { mode: 'cors', credentials: 'same-origin' }, placeholderImage: IMG_PLACEHOLDER }, features: { restoreScrollPosition: true } };
     }
     function reportImageFetchStats() {
         const s = imageFetchStats;
@@ -1035,6 +1072,7 @@
         const $toast = toastr.info(html, '', { timeOut: 0, extendedTimeOut: 0, tapToDismiss: false, closeButton: false, escapeHtml: false, preventDuplicates: false });
         const $all = $('.copybot_capture_toast').closest('.toast');
         if ($all.length > 1) $all.slice(0, -1).remove();
+        window.CopyBotUI?.liftToasts?.();   // 크게보기(dialog, top layer)가 열려 있으면 토스트를 그 위로
         return $toast;
     }
 
@@ -1073,15 +1111,35 @@
     }
 
     // ===== 숨김 종류 계산 =====
-    // 공통: 옵션 select(자동 생성 이미지·선택지·에셋) + 그 밖의 고정 종류 숨김 맵(hideGlobal). 캐릭터별: 동적 블록 숨김 맵(hideChar).
+    // 계속 적용(저장):
+    //  ① 모든 봇 = 옵션 select(자동 생성 이미지·선택지·에셋·상태창) + 그 밖의 고정 종류 숨김 맵(hideGlobal)
+    //  ② 이 봇만 = 캐릭터별 숨김 맵(hideChar). 동적 블록은 종류 id 그대로, 고정 종류는 'bot:종류'(예: 'bot:stat')
+    //     (접두사를 붙이는 이유: 예전 저장본의 캐릭터별 맵에 접두사 없는 고정 종류가 남아 있어도 지금까지처럼 무시된다 — 기존 설정 그대로)
+    // 이번 미리보기만(저장 안 함): 아래 tempHide.
+    // 어느 한 곳에서라도 빼면 빠진다(합집합). "모든 봇에서 빼고 이 봇만 넣기" 같은 반대 예외는 없다 (2026-10-12 유저 확정)
     const KIND_FROM_OPTION = { skipImages: 'genimg', skipChoices: 'choice', skipAssets: 'asset', skipStatus: 'stat' };
+    const BOT_PIN_PREFIX = 'bot:';
+    const botMapKey = (kind) => (isFixedKind(kind) ? BOT_PIN_PREFIX + kind : kind);
+    function kindFromBotMapKey(k) {
+        k = String(k);
+        if (!isFixedKind(k)) return k;                       // 동적 블록(block:…)
+        if (!k.startsWith(BOT_PIN_PREFIX)) return null;      // 접두사 없는 고정 종류(예전 저장본 잔재)는 무시
+        const kind = k.slice(BOT_PIN_PREFIX.length);
+        return KIND_ORDER.includes(kind) ? kind : null;
+    }
+
+    // 저장된 빼기 설정을 범위별로: { global: Set(모든 봇), bot: Set(이 봇만) }
+    function hideSources(settings) {
+        const global = new Set(), bot = new Set();
+        for (const [opt, kind] of Object.entries(KIND_FROM_OPTION)) if (settings[opt]) global.add(kind);
+        for (const [kind, hidden] of Object.entries(settings.hideGlobal || {})) { if (hidden && isFixedKind(kind)) global.add(kind); }
+        for (const [k, hidden] of Object.entries(settings.hideChar || {})) { const kind = hidden ? kindFromBotMapKey(k) : null; if (kind) bot.add(kind); }
+        return { global, bot };
+    }
 
     function computeHideSet(settings) {
-        const set = new Set();
-        for (const [opt, kind] of Object.entries(KIND_FROM_OPTION)) if (settings[opt]) set.add(kind);
-        for (const [kind, hidden] of Object.entries(settings.hideGlobal || {})) { if (hidden && isFixedKind(kind)) set.add(kind); }
-        for (const [kind, hidden] of Object.entries(settings.hideChar || {})) { if (hidden && !isFixedKind(kind)) set.add(kind); }
-        return set;
+        const { global, bot } = hideSources(settings);
+        return new Set([...global, ...bot]);
     }
 
     // ===== 살아있는 미리보기 =====
@@ -1178,18 +1236,77 @@
         return counts;
     }
 
-    // ===== 요소 넣고 빼기 되돌리기(↶)·다시하기(↷) =====
-    // 숨김 집합의 스냅샷을 순서대로 쌓는다. 어디서 바꿨든(꾹 누르기·요소 목록·⚙ 옵션 select) 전부 applyHiddenToPreview 를 지나므로
-    // 거기서 "직전 스냅샷과 다르면 한 칸 추가". 되돌리기는 "가장 최근 변경"을 되돌리는 것이라 경로가 달라도 충돌이 없다.
-    // 스택은 미리보기 한 건(채팅·범위) 한정: 다른 범위/채팅을 열거나 비우면 초기화. 크게보기 이동·접기/펼치기는 유지.
-    let hideHistory = null;   // { key, stack: [sig], pos, applying }
-    const hideSig = (set) => sortKindIds(set).join(',');
+    // ===== 이번 미리보기만 빼기(임시) — 설정에 저장하지 않는다 (2026-10-12 유저 확정) =====
+    // kinds: 이번만 통째로 뺀 종류. solo: 하나만 뺀 요소의 위치('메시지 번호|태그|그 메시지 안 같은 태그 중 몇 번째').
+    // 위치로 적는 이유: 미리보기를 다시 만들 때(크게/작게 보기, 접었다 펼치기, 익명화 변경)마다 복제본이 새로 생겨 요소 객체가 바뀐다.
+    // 수명은 되돌리기 스택과 같다: 같은 채팅·같은 범위의 미리보기 한 건. 캡처를 새로 누르거나 비우거나 채팅이 바뀌면 사라진다.
     const hideHistoryKey = () => preview ? `${window.CopyBotCapture.currentChatKey() || ''}|${preview.s}|${preview.e}` : null;
+    let tempHide = null;   // { key, kinds: Set, solo: Set }
+    function tempState() {
+        const key = hideHistoryKey();
+        if (!key) return null;
+        if (!tempHide || tempHide.key !== key) tempHide = { key, kinds: new Set(), solo: new Set() };
+        return tempHide;
+    }
 
-    function recordHideHistory(hideSet) {
+    // 지금 미리보기에서 실제로 빠지는 종류 = 저장된 설정 + 이번만
+    function effectiveHideSet(settings) {
+        const set = computeHideSet(settings);
+        const t = tempState();
+        if (t) t.kinds.forEach(kind => set.add(kind));
+        return set;
+    }
+
+    function soloLocator(el) {
+        if (!preview || !el || el.nodeType !== 1) return null;
+        const item = preview.items.find(it => it.el !== el && it.el.contains(el));
+        if (!item) return null;
+        const nth = Array.prototype.indexOf.call(item.el.getElementsByTagName(el.tagName), el);
+        return nth < 0 ? null : `${item.index}|${el.tagName}|${nth}`;
+    }
+
+    function resolveSolo(loc) {
+        if (!preview) return null;
+        const [index, tag, nth] = String(loc).split('|');
+        const item = preview.items.find(it => String(it.index) === index);
+        return item ? (item.el.getElementsByTagName(tag)[Number(nth)] || null) : null;
+    }
+
+    // 지금 미리보기에 보이는(아직 안 뺀) 그 종류의 개수
+    function visibleKindCount(kind) {
+        if (!preview) return 0;
+        let n = 0;
+        preview.doc.querySelectorAll('[data-cb-kind]').forEach(el => {
+            if (el.getAttribute('data-cb-kind') !== kind) return;
+            if (el.classList.contains('copybot_kind_hidden') || el.closest('.copybot_kind_wrap_hidden') || !el.getClientRects().length) return;
+            n++;
+        });
+        return n;
+    }
+
+    // ===== 요소 넣고 빼기 되돌리기(↶)·다시하기(↷) =====
+    // 빼기 상태(모든 봇·이 봇·이번만·하나만)의 스냅샷을 순서대로 쌓는다. 어디서 바꿨든(꾹 누르기·요소 목록·⚙ 옵션 select) 전부 applyHiddenToPreview 를
+    // 지나므로 거기서 "직전 스냅샷과 다르면 한 칸 추가". 되돌리기는 "가장 최근 변경"을 되돌리는 것이라 경로가 달라도 충돌이 없다.
+    // 스택은 미리보기 한 건(채팅·범위) 한정: 캡처를 새로 누르거나 다른 범위/채팅을 열거나 비우면 초기화. 크게보기 이동·접기/펼치기는 유지.
+    let hideHistory = null;   // { key, stack: [sig], pos, applying }
+    function hideSnapshot(settings) {
+        const { global, bot } = hideSources(settings);
+        const t = tempState();
+        return { g: sortKindIds(global), b: sortKindIds(bot), t: t ? sortKindIds(t.kinds) : [], s: t ? [...t.solo].sort() : [] };
+    }
+    const hideSig = (settings) => JSON.stringify(hideSnapshot(settings));
+
+    // 한 번의 조작이 설정을 여러 개 바꿔도 되돌리기는 한 칸이 되게 묶는다
+    function batchHide(fn) {
+        const h = hideHistory;
+        if (h) h.applying = true;
+        try { return fn(); } finally { if (h) h.applying = false; applyHiddenToPreview(); }
+    }
+
+    function recordHideHistory(settings) {
         if (!preview) return;
         const key = hideHistoryKey();
-        const sig = hideSig(hideSet);
+        const sig = hideSig(settings);
         if (!hideHistory || hideHistory.key !== key) { hideHistory = { key, stack: [sig], pos: 0, applying: false }; }
         else if (!hideHistory.applying && sig !== hideHistory.stack[hideHistory.pos]) {
             hideHistory.stack.length = hideHistory.pos + 1;
@@ -1200,26 +1317,35 @@
         window.CopyBotUI?.renderCaptureHistory?.();
     }
 
+    // 되돌리기 스택과 이번만 빼기를 함께 비운다 (둘은 수명이 같다)
     function resetHideHistory() {
         hideHistory = null;
+        tempHide = null;
         window.CopyBotUI?.renderCaptureHistory?.();
     }
 
-    // 스택의 pos 위치 스냅샷으로 이동: 지금 숨김 집합과 다른 종류만 setKindHidden 으로 맞춘다 (설정도 함께 그 시점으로)
+    // 스택의 pos 위치 스냅샷으로 이동: 저장된 설정은 지금과 다른 종류만 setKindHidden 으로 맞추고(설정도 함께 그 시점으로), 이번만 빼기는 통째로 그 시점 것으로
     function gotoHideHistory(pos) {
         if (!preview || !hideHistory || pos < 0 || pos >= hideHistory.stack.length) return false;
+        if (closeIfChatChanged()) { toastr.info(CHAT_CHANGED_MSG); liftToasts(); return false; }   // 이전 채팅의 스택으로 새 채팅 설정을 바꾸지 않음
         const C = window.CopyBotCapture;
-        const target = new Set(hideHistory.stack[pos].split(',').filter(Boolean));
-        const current = computeHideSet(C.getSettings());
+        let target;
+        try { target = JSON.parse(hideHistory.stack[pos]); } catch (e) { return false; }
+        const current = hideSnapshot(C.getSettings());
+        let persisted = false;   // 저장된 설정이 바뀌었는가 (이번만 빼기만 되돌렸으면 저장소를 건드리지 않는다)
         hideHistory.applying = true;
         try {
-            for (const kind of target) if (!current.has(kind)) C.setKindHidden(kind, true);
-            for (const kind of current) if (!target.has(kind)) C.setKindHidden(kind, false);
+            for (const [scope, part] of [['global', 'g'], ['bot', 'b']]) {
+                for (const kind of target[part]) if (!current[part].includes(kind)) { C.setKindHidden(kind, true, scope); persisted = true; }
+                for (const kind of current[part]) if (!target[part].includes(kind)) { C.setKindHidden(kind, false, scope); persisted = true; }
+            }
+            const t = tempState();
+            if (t) { t.kinds = new Set(target.t); t.solo = new Set(target.s); }
         } finally { hideHistory.applying = false; }
         hideHistory.pos = pos;
         // 일부를 못 바꿨으면(캐릭터 없음 등) 실제 상태를 그 칸에 기록해 스택과 화면이 어긋나지 않게
-        hideHistory.stack[pos] = hideSig(computeHideSet(C.getSettings()));
-        try { window.CopyBotSettings?.saveSettings?.(); } catch (e) { /* 무시 */ }
+        hideHistory.stack[pos] = hideSig(C.getSettings());
+        if (persisted) { try { window.CopyBotSettings?.saveSettings?.(); } catch (e) { /* 무시 */ } }
         applyHiddenToPreview();
         window.CopyBotUI?.renderCaptureKinds?.();
         return true;
@@ -1229,11 +1355,15 @@
     function applyHiddenToPreview() {
         if (!preview) return;
         const settings = window.CopyBotCapture.getSettings();
-        const hideSet = computeHideSet(settings);
-        recordHideHistory(hideSet);
+        const hideSet = effectiveHideSet(settings);
+        recordHideHistory(settings);
+        // 하나만 뺀 요소: 위치 목록을 지금 복제본의 표식(data-cb-solo)으로 다시 옮긴다
+        const temp = tempState();
+        preview.doc.querySelectorAll('[data-cb-solo]').forEach(el => el.removeAttribute('data-cb-solo'));
+        if (temp) temp.solo.forEach(loc => { const el = resolveSolo(loc); if (el) el.setAttribute('data-cb-solo', '1'); });
         preview.doc.querySelectorAll('.copybot_kind_wrap_hidden').forEach(el => el.classList.remove('copybot_kind_wrap_hidden'));
-        preview.doc.querySelectorAll('[data-cb-kind]').forEach(el => {
-            const hidden = hideSet.has(el.getAttribute('data-cb-kind'));
+        preview.doc.querySelectorAll('[data-cb-kind], [data-cb-solo]').forEach(el => {
+            const hidden = el.hasAttribute('data-cb-solo') || hideSet.has(el.getAttribute('data-cb-kind'));
             el.classList.toggle('copybot_kind_hidden', hidden);
             // 숨긴 요소 하나만 감싼 상자(정규식 래퍼 등)는 빈 껍데기(여백·테두리)가 남지 않게 같이 접음
             if (hidden) {
@@ -1292,7 +1422,8 @@
         return { vh: r.height || window.innerHeight, vw: r.width || window.innerWidth };
     }
 
-    const VIEWPORT_UNIT_RE = /(-?\d*\.?\d+)(d|s|l)?(vh|vw|vmin|vmax)\b/gi;
+    const VIEWPORT_UNIT_RE = /(-?\d*\.?\d+)(d|s|l)?(vh|vw|vmin|vmax)\b/gi;        // replace 용 (g)
+    const VIEWPORT_UNIT_TEST_RE = /(-?\d*\.?\d+)(d|s|l)?(vh|vw|vmin|vmax)\b/i;    // .test 용 (g 없음 → lastIndex 상태 없음)
 
     function convertViewportUnits(value, units) {
         return value.replace(VIEWPORT_UNIT_RE, (m, num, prefix, unit) => {
@@ -1327,8 +1458,7 @@
                     for (let i = 0; i < rule.style.length; i++) {
                         const prop = rule.style[i];
                         const val = rule.style.getPropertyValue(prop);
-                        if (!val || !VIEWPORT_UNIT_RE.test(val)) { VIEWPORT_UNIT_RE.lastIndex = 0; continue; }
-                        VIEWPORT_UNIT_RE.lastIndex = 0;
+                        if (!val || !VIEWPORT_UNIT_TEST_RE.test(val)) continue;
                         const pri = rule.style.getPropertyPriority(prop);
                         decls.push(`${prop}: ${convertViewportUnits(val, units)}${pri ? ' !important' : ''};`);
                     }
@@ -1375,9 +1505,20 @@
             #chat { position: static !important; width: ${chatWidth}px !important; max-width: none !important; height: auto !important; max-height: none !important; overflow: visible !important; margin: 0 !important; display: flow-root !important; padding-bottom: 0 !important; }
             .copybot_kind_hidden, .copybot_kind_wrap_hidden { display: none !important; }
             .copybot_kind_focus { outline: 2px dashed #e8a838 !important; outline-offset: 2px; }
-            #copybot_kind_popup { position: absolute; z-index: 2147483000; display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 8px; background: rgba(30, 30, 30, 0.96); color: #fff; font: 13px/1.4 sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,0.4); max-width: 260px; }
-            #copybot_kind_popup button { padding: 7px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.12); color: #fff; font-size: 13px; text-align: left; cursor: pointer; }
-            #copybot_kind_popup button.copybot_kind_popup_close { background: transparent; opacity: 0.8; text-align: center; }
+            #copybot_kind_popup { position: absolute; z-index: 2147483000; display: flex; flex-direction: column; gap: 6px; box-sizing: border-box; width: max-content; min-width: 200px; max-width: 280px; padding: 8px; border-radius: 10px; background: rgba(30, 30, 30, 0.96); color: #fff; font: 13px/1.4 sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+            #copybot_kind_popup button { margin: 0; font: inherit; color: #fff; cursor: pointer; }
+            #copybot_kind_popup .copybot_kind_popup_head { display: flex; align-items: center; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.18); }
+            #copybot_kind_popup .copybot_kind_popup_tab { flex: 0 1 auto; min-width: 0; padding: 4px 9px; border-radius: 999px; border: 1px solid transparent; background: transparent; font-size: 12px; opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            #copybot_kind_popup .copybot_kind_popup_tab_on { opacity: 1; font-weight: 600; }
+            #copybot_kind_popup button.copybot_kind_popup_tab_on { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.3); }
+            #copybot_kind_popup .copybot_kind_popup_close { flex: 0 0 auto; margin-left: auto; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; font-size: 17px; line-height: 1; opacity: 0.7; }
+            #copybot_kind_popup .copybot_kind_popup_body { display: flex; flex-direction: column; gap: 2px; }
+            #copybot_kind_popup .copybot_kind_popup_row { min-height: 38px; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; font-size: 13px; text-align: left; }
+            #copybot_kind_popup .copybot_kind_popup_row:active, #copybot_kind_popup .copybot_kind_popup_chip:active { background: rgba(255,255,255,0.22); }
+            #copybot_kind_popup .copybot_kind_popup_pin { display: flex; align-items: center; gap: 6px; margin-top: 4px; padding: 8px 2px 0 10px; border-top: 1px solid rgba(255,255,255,0.18); }
+            #copybot_kind_popup .copybot_kind_popup_pin_label { flex: 1 1 auto; white-space: nowrap; opacity: 0.85; }
+            #copybot_kind_popup .copybot_kind_popup_pin_label i { margin-right: 5px; font-size: 11px; }
+            #copybot_kind_popup .copybot_kind_popup_chip { flex: 0 0 auto; min-height: 34px; padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.12); font-size: 12px; white-space: nowrap; }
             ${REMOVE_SELECTORS.map(s => `.mes ${s}`).join(', ')} { display: none !important; }
         `;
         doc.head.appendChild(own);
@@ -1442,12 +1583,12 @@
     }
 
     // ===== 미리보기 격리 ("평행세계", 2026-10-09 유저 지시) =====
-    // 스냅샷 상태창 안에서 스크립트는 그대로 돌되(상호작용 유지), 바깥 세계엔 손을 못 대게 한다:
-    //  parent/top → 자기 자신(실리 창·미리보기 창 접근 불가), postMessage 무력화, fetch/XHR/WebSocket/EventSource/sendBeacon 차단,
-    //  localStorage/sessionStorage/indexedDB/cookie 차단. 다른 스크립트보다 먼저 실행되도록 <head> 맨 앞에 넣는다.
-    // 브라우저 수준 차단(스크립트가 window.fetch 를 되살려도 막힘): 네트워크 연결·폼 전송 금지. 이미지/스타일 로드는 그대로.
-    // 한계: window.top 은 브라우저가 덮어쓰기를 금지(unforgeable)해서 막지 못함 — 완전 격리는 별도 설계(불투명 출처 + 안쪽 렌더 에이전트) 필요.
-    const ISOLATION_PRELUDE = '<meta http-equiv="Content-Security-Policy" content="connect-src \'none\'; form-action \'none\';">'
+    // 현재 상태창 스냅샷은 **정적**이다: stripScripts 가 원본 문서의 <script>·on* 속성·중첩 프레임 주소·javascript: 링크·폼 전송 대상을 떼고
+    // "지금 그려진 DOM" 만 넣는다(2026-10-09 유저 결정, 아래 snapshotIframes 설명). 이 머리말은 그래도 남을 수 있는 실행 경로에 대한 2차 방어다:
+    //  parent/top → 자기 자신, postMessage 무력화, fetch/XHR/WebSocket/EventSource/sendBeacon 차단, localStorage/sessionStorage/indexedDB/cookie 차단
+    //  (<head> 맨 앞), 그리고 CSP 로 네트워크 연결·폼 전송 금지. 이미지/스타일 로드는 그대로.
+    // 한계: window.top 은 브라우저가 덮어쓰기를 금지(unforgeable)해서 막지 못함 — 완전 격리(sandbox 불투명 출처)는 폰 확인이 필요해 보류.
+    const ISOLATION_PRELUDE = '<meta data-copybot-isolation="1" http-equiv="Content-Security-Policy" content="connect-src \'none\'; form-action \'none\';">'
         + '<script data-copybot-isolation="1">(function(){try{'
         + 'var w=window;'
         + 'var shadow=function(n,v){try{Object.defineProperty(w,n,{configurable:true,get:function(){return v;}});}catch(e){}};'
@@ -1475,8 +1616,21 @@
     // → 원본 iframe 안 문서의 "지금 그려진 DOM" 을 **스크립트를 떼고** 그대로 직렬화해 복제본의 srcdoc 으로 넣고, 높이·스크롤 위치도 지금 보이는 값 그대로.
     // (2026-10-09 유저 결정: 미리보기 안에서 상태창 스크립트가 '동작'하는 건 포기, 대신 보는 화면 그대로. 스크립트가 다시 돌면
     //  외부 스크립트 재다운로드로 늦게 뜨고, 부모 창(실리)을 못 읽어 유저 이름이 기본값 '사용자'로 바뀌고, 높이가 바뀌며 미리보기가 들썩였음)
+    // 보기 전용 정적 스냅샷: 실행·이동·전송 경로를 뗀다(상자 모양은 유지). 우리 격리 머리말(data-copybot-isolation)만 남김.
     function stripScripts(root) {
-        root.querySelectorAll('script').forEach(s => { if (!s.hasAttribute('data-copybot-isolation')) s.remove(); });
+        const ours = (el) => el.hasAttribute('data-copybot-isolation');
+        root.querySelectorAll('script').forEach(s => { if (!ours(s)) s.remove(); });
+        // 중첩 프레임: 지우면 레이아웃이 바뀌므로 상자는 두고 내용 주소만 떼고 sandbox 로 봉인
+        root.querySelectorAll('iframe, frame').forEach(f => { f.removeAttribute('src'); f.removeAttribute('srcdoc'); f.setAttribute('sandbox', ''); });
+        root.querySelectorAll('object, embed').forEach(o => { o.removeAttribute('data'); o.removeAttribute('src'); });
+        // meta refresh 등 문서 동작을 바꾸는 http-equiv (우리 CSP 는 유지), HTML imports
+        root.querySelectorAll('meta[http-equiv]').forEach(m => { if (!ours(m)) m.remove(); });
+        root.querySelectorAll('link[rel]').forEach(l => { if (/(^|\s)import(\s|$)/i.test(l.getAttribute('rel') || '')) l.remove(); });
+        // 눌러서 실행·이동·전송되는 경로
+        root.querySelectorAll('a[href], area[href]').forEach(a => { if (/^\s*javascript:/i.test(a.getAttribute('href') || '')) a.removeAttribute('href'); });
+        root.querySelectorAll('a[target], area[target], form[target]').forEach(a => a.removeAttribute('target'));
+        root.querySelectorAll('form[action]').forEach(f => f.removeAttribute('action'));
+        root.querySelectorAll('[formaction]').forEach(b => b.removeAttribute('formaction'));
         for (const el of root.querySelectorAll('*')) {
             for (const a of [...el.attributes]) { if (/^on/i.test(a.name)) el.removeAttribute(a.name); }
         }
@@ -1520,8 +1674,10 @@
         try { if (frame.contentDocument && frame.contentDocument.readyState === 'complete' && frame.contentDocument.body) hook(); } catch (e) { /* 무시 */ }
     }
 
-    // ===== 꾹 누르기 → "이 요소 빼기" 팝업 (알못 친화) =====
-    // 미리보기 안 시각 요소를 ~0.6초 누르면 팝업. 다음 일반 터치가 올 때까지 유지. 팝업의 버튼으로 그 종류를 캡처에서 뺌.
+    // ===== 꾹 누르기 → 빼기 메뉴 (알못 친화) =====
+    // 미리보기 안 시각 요소를 ~0.6초 누르면 메뉴. 다음 일반 터치가 올 때까지 유지.
+    // 메뉴는 항상 최대 3줄: 이것만 빼기 / 전부 빼기(같은 종류가 둘 이상일 때) / 항상 빼기 [이 봇][모든 봇]. 위 두 줄은 이번 미리보기만, 아래 줄은 저장.
+    // 요소가 겹쳐 있으면(상태창 안 이미지 등) 줄을 늘리지 않고 맨 윗줄에서 대상을 고른다 (2026-10-12 유저 확정)
     const LONG_PRESS_MS = 550;
 
     function closeKindPopup() {
@@ -1540,32 +1696,66 @@
     }
 
     function showKindPopup(targets, x, y) {
+        targets = (targets || []).filter(t => t && t.getAttribute && t.getAttribute('data-cb-kind'));   // 표식이 래퍼로 승격돼 비어 있는 요소는 제외
         if (!preview || !targets.length) return;
         closeKindPopup();
         const doc = preview.doc;
-        const pop = doc.createElement('div');
+        const C = window.CopyBotCapture;
+        const hasChar = !!C.currentCharKey();
+        const mk = (tag, cls, text) => { const el = doc.createElement(tag); if (tag === 'button') el.type = 'button'; if (cls) el.className = cls; if (text !== undefined) el.textContent = text; return el; };
+        const tap = (el, fn) => el.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); fn(); });
+        const pop = mk('div');
         pop.id = 'copybot_kind_popup';
-        targets[0].classList.add('copybot_kind_focus');
-        // 고정 종류(상태창·이미지·선택지·표…)는 공통(모든 봇) 설정을, 동적 블록은 이 캐릭터 설정을 바꾼다 — 범위를 버튼 글자에 그대로 적는다 (2026-10-09 회의 결론)
-        targets.forEach(t => {
-            const kind = t.getAttribute('data-cb-kind');
-            const b = doc.createElement('button');
-            b.type = 'button';
-            b.textContent = `"${kindLabel(kind)}" 빼기 · ${isFixedKind(kind) ? '모든 봇' : '이 봇만'}`;
-            b.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); window.CopyBotCapture.hideKindFromPreview(kind); closeKindPopup(); });
-            b.addEventListener('pointerenter', () => { doc.querySelectorAll('.copybot_kind_focus').forEach(el => el.classList.remove('copybot_kind_focus')); t.classList.add('copybot_kind_focus'); });
-            pop.appendChild(b);
+        const head = mk('div', 'copybot_kind_popup_head');
+        const body = mk('div', 'copybot_kind_popup_body');
+        let current = targets[0];
+        const act = (action) => { const target = current; closeKindPopup(); C.excludeFromPreview(action, target); };
+        const tabs = targets.map(t => {
+            // 대상이 하나면 제목, 겹쳐 있으면 눌러서 대상을 바꾸는 단추
+            const tab = mk(targets.length > 1 ? 'button' : 'span', 'copybot_kind_popup_tab', kindLabel(t.getAttribute('data-cb-kind')));
+            if (targets.length > 1) tap(tab, () => { current = t; render(); });
+            head.appendChild(tab);
+            return { tab, t };
         });
-        const close = doc.createElement('button');
-        close.type = 'button';
-        close.className = 'copybot_kind_popup_close';
-        close.textContent = '닫기';
-        close.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); closeKindPopup(); });
-        pop.appendChild(close);
+        const close = mk('button', 'copybot_kind_popup_close', '×');
+        close.title = '닫기';
+        tap(close, closeKindPopup);
+        head.appendChild(close);
+        function render() {
+            doc.querySelectorAll('.copybot_kind_focus').forEach(el => el.classList.remove('copybot_kind_focus'));
+            current.classList.add('copybot_kind_focus');   // 무엇이 빠질지 테두리로
+            tabs.forEach(x => x.tab.classList.toggle('copybot_kind_popup_tab_on', x.t === current));
+            const kind = current.getAttribute('data-cb-kind');
+            body.textContent = '';
+            const one = mk('button', 'copybot_kind_popup_row', '이것만 빼기');
+            tap(one, () => act('solo'));
+            body.appendChild(one);
+            const n = visibleKindCount(kind);
+            if (n > 1) {
+                const all = mk('button', 'copybot_kind_popup_row', `전부 빼기 · ${n}개`);
+                tap(all, () => act('temp'));
+                body.appendChild(all);
+            }
+            // 봇 전용 블록은 다른 봇에 의미가 없으므로 [이 봇]만. 캐릭터가 없으면 [이 봇]은 저장할 곳이 없다
+            const scopes = [];
+            if (hasChar) scopes.push(['bot', '이 봇']);
+            if (isFixedKind(kind)) scopes.push(['global', '모든 봇']);
+            if (!scopes.length) return;
+            const pin = mk('div', 'copybot_kind_popup_pin');
+            const label = mk('span', 'copybot_kind_popup_pin_label');
+            label.appendChild(mk('i', 'fa-solid fa-thumbtack'));
+            label.appendChild(doc.createTextNode('항상 빼기'));
+            pin.appendChild(label);
+            scopes.forEach(([scope, text]) => { const chip = mk('button', 'copybot_kind_popup_chip', text); tap(chip, () => act(scope)); pin.appendChild(chip); });
+            body.appendChild(pin);
+        }
+        pop.appendChild(head);
+        pop.appendChild(body);
+        render();
         pop.addEventListener('pointerdown', (e) => e.stopPropagation());
         doc.body.appendChild(pop);
         const vw = doc.documentElement.clientWidth || preview.chatWidth;
-        const w = pop.offsetWidth || 220, hgt = pop.offsetHeight || 80;
+        const w = pop.offsetWidth || 220, hgt = pop.offsetHeight || 150;
         const left = Math.max(4, Math.min(x - w / 2, vw - w - 4));
         const top = Math.max(4, y - hgt - 12 > 0 ? y - hgt - 12 : y + 12);
         pop.style.left = `${Math.round(left)}px`;
@@ -1578,7 +1768,8 @@
         doc.__cbLongPress = true;
         let timer = null, sx = 0, sy = 0;
         const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
-        const resolve = (target) => frame ? [frame, ...markedChain(frame.parentElement)] : markedChain(target);
+        // 상태창 문서 안을 누르면 그 프레임(또는 표식이 승격된 래퍼)부터 바깥쪽 표식 사슬 — 표식 없는 frame 자체는 넣지 않음
+        const resolve = (target) => frame ? markedChain(frame) : markedChain(target);
         const toOuter = (x, y) => {
             if (!frame) return { x: x + (doc.defaultView?.scrollX || 0), y: y + (doc.defaultView?.scrollY || 0) };
             const r = frame.getBoundingClientRect();
@@ -1599,9 +1790,12 @@
         ['pointerup', 'pointercancel'].forEach(ev => doc.addEventListener(ev, cancel, true));
         doc.addEventListener('scroll', cancel, true);
         doc.addEventListener('contextmenu', (e) => { if (resolve(e.target).length) e.preventDefault(); }, true);   // 길게 누를 때 브라우저 메뉴 안 뜨게
+        // 보기 전용: 미리보기·상태창 스냅샷 안 링크를 눌러도 이동하지 않음
+        doc.addEventListener('click', (e) => { if (e.target?.closest?.('a[href], area[href]')) e.preventDefault(); }, true);
     }
 
-    function makePreviewClone(mes, rules) {
+    // mesIndex: 원문 대조(태그만 벗겨진 글 상태창)용 메시지 번호. 컨테이너 옮기기 때는 mesid 없는 미리보기 복제본을 넘기므로 호출자가 번호를 준다
+    function makePreviewClone(mes, rules, mesIndex = mes.getAttribute('mesid')) {
         const clone = mes.cloneNode(true);
         clone.removeAttribute('mesid');
         clone.classList.add('copybot_capture_preview_mes');
@@ -1612,8 +1806,8 @@
         syncFormState(mes, clone);
         snapshotIframes(mes, clone, rules);
         clone.querySelectorAll(REMOVE_SELECTORS.join(',')).forEach(el => el.remove());
-        clone.querySelectorAll('[class*="hover"], .mes_hover').forEach(el => { el.style.visibility = 'hidden'; });
-        const counts = annotateKinds(clone, mes.getAttribute('mesid'));
+        clone.querySelectorAll('[class*="hover"], .mes_hover').forEach(el => { if (!el.closest('.mes_text')) el.style.visibility = 'hidden'; });   // 본문 안 요소는 그대로
+        const counts = annotateKinds(clone, mesIndex);
         anonymizeClone(clone, rules);
         return { clone, counts };
     }
@@ -1630,6 +1824,7 @@
     // sourceItems 가 있으면(컨테이너 옮기기) 라이브 채팅 대신 기존 미리보기 복제본에서 지금 상태 그대로 다시 스냅샷
     // 동시에 두 번 만들지 않는다(자동 열기 + 버튼 겹침 방지). 만드는 도중 다른 빌드가 preview 를 갈아끼우면 이 빌드는 조용히 중단
     let previewBuilding = false;
+    let previewOpening = false;   // openPreview 가 시작돼 끝날 때까지 (빌드 전 대기 구간 포함) — 연타·겹침 방지
     async function buildPreview(holder, s, e, rules, sourceItems = null) {
         if (previewBuilding) throw new Error('미리보기를 만드는 중입니다. 잠시 뒤 다시 눌러 주십시오.');
         previewBuilding = true;
@@ -1639,8 +1834,35 @@
             previewBuilding = false;
         }
     }
+    let personaShortLogged = false;   // 한 글자 페르소나 이름 제외 안내(디버그 로그)는 1회만
+    const CHAT_CHANGED_MSG = '채팅이 바뀌어 미리보기를 닫았습니다. 캡처를 다시 눌러 주십시오.';
+    const BUSY_MSG = '이미지 만드는 중입니다. 끝나거나 중단한 뒤 다시 눌러 주십시오.';
+    // 크게보기(dialog, top layer)가 열려 있으면 방금 띄운 토스트를 그 위로 올림 (ui.js liftToasts)
+    const liftToasts = () => { try { window.CopyBotUI?.liftToasts?.(); } catch (e) { /* 무시 */ } };
+    // 미리보기를 만든 채팅과 지금 채팅이 다르면 닫는다 (남겨 두면 새 채팅의 같은 번호로 재구성하거나 새 캐릭터 키에 저장하게 됨). 닫았으면 true
+    function closeIfChatChanged() {
+        const C = window.CopyBotCapture;
+        if (!preview || preview.chatKey === C.currentChatKey()) return false;
+        destroyPreview();
+        resetHideHistory();
+        C.clearResult();
+        window.CopyBotUI?.closeCaptureOverlay?.();
+        $('#copybot_capture_status').text(CHAT_CHANGED_MSG).css('color', '');
+        return true;
+    }
+    // 이 봇에서 감지된 요소 종류를 기록해 둔다 → 요소 목록에 계속 남고(지금 캡처 범위에 없어도), 유저가 기록을 지울 수 있다 (2026-10-12 유저 지시)
+    function rememberSeenKinds() {
+        const S = window.CopyBotSettings;
+        const key = window.CopyBotCapture.currentCharKey();
+        if (!preview || !key || !S?.addCaptureSeenKinds) return;
+        try { if (S.addCaptureSeenKinds(key, Object.keys(preview.kinds || {}))) S.saveSettings?.(); } catch (e) { debugLog('감지 기록 저장 실패', e); }
+    }
+
+    let previewSeq = 0;   // 미리보기 토큰: 새로 만든 미리보기마다 +1 (컨테이너 옮기기는 같은 토큰 유지) → 결과 재사용 서명에 포함
     async function buildPreviewInner(holder, s, e, rules, sourceItems) {
-        const prepared = sourceItems ? sourceItems.map(it => ({ index: it.index, ...makePreviewClone(it.el, []) })) : null;
+        const prepared = sourceItems ? sourceItems.map(it => ({ index: it.index, ...makePreviewClone(it.el, [], it.index) })) : null;
+        const token = (sourceItems && preview) ? preview.token : ++previewSeq;
+        const chatKey = (sourceItems && preview) ? preview.chatKey : window.CopyBotCapture.currentChatKey();
         destroyPreview();
         const chat = document.querySelector('#chat');
         const chatWidth = Math.round(chat ? chat.getBoundingClientRect().width : 400);
@@ -1656,7 +1878,7 @@
         holder.appendChild(frame);
         const doc = await createPreviewDoc(frame, chatWidth, backgroundColor);
         if (!frame.isConnected) throw new Error('미리보기 화면이 사라졌습니다.');
-        const pv = { s, e, frame, doc, chatWidth, items: [], rules, timer: null, backgroundColor };
+        const pv = { s, e, frame, doc, chatWidth, items: [], rules, timer: null, backgroundColor, token, chatKey };
         preview = pv;
         installKindLongPress(doc);
         const target = doc.getElementById('chat');
@@ -1670,21 +1892,33 @@
         if (prepared) {
             prepared.forEach(p => place(p.index, p.clone, p.counts));
         } else {
+            let jumped = false;   // /chat-jump 로 그리게 했으면 그 뒤 메시지들의 상태창 iframe 이 재로드 중일 수 있음
             for (let i = s; i <= e; i++) {
                 if (!document.querySelector(`#chat .mes[mesid="${i}"]`)) {
-                    const ok = await ensureRendered(i);
-                    if (preview !== pv) throw new Error('미리보기가 바뀌어 중단했습니다.');
+                    jumped = true;
+                    const ok = await ensureMessageRendered(i);
+                    if (preview !== pv || !pv.frame.isConnected) throw new Error('미리보기가 바뀌어 중단했습니다.');
                     if (!ok) continue;
                 }
-                const mes = document.querySelector(`#chat .mes[mesid="${i}"]`);
+                let mes = document.querySelector(`#chat .mes[mesid="${i}"]`);
                 if (!mes || !mes.querySelector('.mes_text')) continue;
+                if (jumped) {
+                    await waitForFrames(mes);
+                    if (preview !== pv || !pv.frame.isConnected) throw new Error('미리보기가 바뀌어 중단했습니다.');
+                    mes = document.querySelector(`#chat .mes[mesid="${i}"]`);   // 기다리는 동안 다시 그려졌을 수 있음
+                    if (!mes || !mes.querySelector('.mes_text')) continue;
+                }
                 const { clone, counts } = makePreviewClone(mes, rules);
                 place(i, clone, counts);
-                if ((i - s) % 5 === 4) { await new Promise(r => setTimeout(r, 0)); if (preview !== pv) throw new Error('미리보기가 바뀌어 중단했습니다.'); }
+                if ((i - s) % 5 === 4) { await new Promise(r => setTimeout(r, 0)); if (preview !== pv || !pv.frame.isConnected) throw new Error('미리보기가 바뀌어 중단했습니다.'); }
             }
         }
         if (!pv.items.length) { destroyPreview(); throw new Error('미리보기에 넣을 본문을 찾지 못했습니다.'); }
+        // 만드는 사이 채팅이 바뀌었으면(과거 메시지 로드 대기 중 등) 두 채팅이 섞인 미리보기를 남기지 않음
+        if (pv.chatKey !== window.CopyBotCapture.currentChatKey()) { destroyPreview(); throw new Error('채팅이 바뀌어 중단했습니다. 캡처를 다시 눌러 주십시오.'); }
         pv.kinds = kinds;
+        // 상태창 프레임이 있으면 로드 뒤 종류가 바뀔 수 있어(프레임 → 상태창·선택지) 감지 기록은 아래 타이머가 끝날 때 남긴다
+        if (!pv.doc.querySelector('.mes iframe')) rememberSeenKinds();
         applyHiddenToPreview();
         // 미리보기 안 내용 크기가 바뀌면(상태창 접기 등) 바깥 프레임 높이를 바로 맞춤
         try {
@@ -1695,39 +1929,43 @@
         let ticks = 0;
         pv.timer = setInterval(() => {
             if (preview !== pv || !pv.frame.isConnected) { clearInterval(pv.timer); pv.timer = null; return; }
+            if (ticks === 0 && !pv.doc.querySelector('.mes iframe')) { clearInterval(pv.timer); pv.timer = null; resizePreviewFrame(); return; }   // 프레임 없으면 할 일 없음 (높이는 ResizeObserver 담당)
             if (reclassifyChoiceFrames(pv.doc)) { pv.kinds = previewKindCounts(); applyHiddenToPreview(); window.CopyBotUI?.renderCaptureKinds?.(); }
             resizePreviewFrame();
-            if (++ticks >= 12) { clearInterval(pv.timer); pv.timer = null; }
+            if (++ticks >= 12) { clearInterval(pv.timer); pv.timer = null; rememberSeenKinds(); window.CopyBotUI?.renderCaptureKinds?.(); }
         }, 500);
         schedulePreviewResize();
         return pv;
     }
 
     // 미리보기 상태 서명 (같은 상태면 렌더 결과 재사용)
-    function previewSignature(settings) {
-        if (!preview) return null;
-        const hide = sortKindIds(computeHideSet(settings));
-        return JSON.stringify({ s: preview.s, e: preview.e, hide, show: settings.show, scale: settings.scale, layout: settings.layout, rules: settings.anonymize ? settings.rules : [] });
+    function previewSignature(settings, pv = preview) {
+        if (!pv) return null;
+        const hide = sortKindIds(effectiveHideSet(settings));
+        const temp = tempState();
+        const solo = temp ? [...temp.solo].sort() : [];   // 하나만 뺀 요소가 달라지면 옛 이미지를 재사용하지 않음
+        // token·chatKey: 같은 번호 범위라도 다시 만든 미리보기(내용이 바뀌었을 수 있음)·다른 채팅이면 옛 이미지를 재사용하지 않음
+        return JSON.stringify({ token: pv.token, chatKey: pv.chatKey, s: pv.s, e: pv.e, hide, solo, show: settings.show, scale: settings.scale, layout: settings.layout, rules: settings.anonymize ? settings.rules : [] });
     }
 
     // 미리보기 안의 메시지 복제본 하나를 이미지로 (숨긴 요소는 아예 빼고 #chat 옆에 재배치해서 렌더)
-    async function renderPreviewItem(lib, item, rules, scale) {
+    // pv: 렌더를 시작한 미리보기 (도중에 preview 가 바뀌거나 닫혀도 이 렌더는 시작한 미리보기 값으로 끝까지 — 바뀐 건 renderPreview 가 다음 칸에서 멈춤)
+    async function renderPreviewItem(lib, pv, item, rules, scale) {
         const source = item.el;
         const chat = document.querySelector('#chat') || document.body;
         const clone = source.cloneNode(true);
-        clone.style.removeProperty('margin-bottom');
         clone.querySelectorAll('.copybot_kind_hidden, .copybot_kind_wrap_hidden').forEach(el => el.remove());
         const origFrames = [...source.querySelectorAll('iframe')].filter(f => !f.closest('.copybot_kind_hidden, .copybot_kind_wrap_hidden'));
         await inlineIframes(lib, origFrames, clone, rules, scale, null);
         applyRoleInline(clone, readShowSettings());
         clone.classList.add('copybot_capture_offscreen');
         neutralizeRenderClone(clone);   // 이미지로 못 바꾼 iframe·스크립트는 라이브 문서에서 절대 실행되지 않게
-        clone.style.cssText += `;position:absolute;left:-20000px;top:0;width:${preview.chatWidth}px;max-width:${preview.chatWidth}px;pointer-events:none;`;
+        clone.style.cssText += `;position:absolute;left:-20000px;top:0;width:${pv.chatWidth}px;max-width:${pv.chatWidth}px;pointer-events:none;`;
         chat.appendChild(clone);
         try {
             await waitForImages(clone);
             await new Promise(r => requestAnimationFrame(r));
-            const backgroundColor = preview.backgroundColor;
+            const backgroundColor = pv.backgroundColor;
             tagFontsAndLines(clone);
             window.CopyBotCapture._lastRenderDebug = measureLayout(clone);
             const canvas = await lib.domToCanvas(clone, libOptions({
@@ -1768,17 +2006,20 @@
         const rules = settings.anonymize ? normalizeRules(settings.rules) : [];
         const scale = Math.min(3, Math.max(1, settings.scale || 2));
         const split = settings.layout === 'split';
+        const pv = preview;   // 이 렌더가 찍을 미리보기 (도중에 닫히거나 갈아끼워지면 아래 루프가 멈춤)
         let lib, items, count;
         try {
             lib = await loadLibrary();
             await settleViewport();
             if (!preview) throw new Error('미리보기가 없습니다.');
+            if (preview !== pv) throw new Error('미리보기가 바뀌어 중단했습니다.');
             const show = readShowSettings();
-            items = preview.items.filter(it => !isRoleTextHidden(it.el, show));   // 메시지 OFF 인 역할은 통째로 제외
+            items = pv.items.filter(it => !isRoleTextHidden(it.el, show));   // 메시지 OFF 인 역할은 통째로 제외
             if (!items.length) throw new Error('표시 요소 설정으로 찍을 메시지가 하나도 없습니다.');
             count = items.length;
         } catch (error) {
             captureState = null;
+            imageFetchStats = null;
             throw error;
         }
         const images = [];
@@ -1794,9 +2035,10 @@
             for (let k = 0; k < items.length; k++) {
                 const item = items[k];
                 if (captureState.aborted) throw new Error('중단했습니다.');
+                if (preview !== pv) throw new Error('미리보기가 바뀌어 중단했습니다.');
                 showCaptureToast(count > 1 ? `이미지 만드는 중… ${k + 1}/${count} (#${item.index})` : `#${item.index} 이미지 만드는 중…`);
                 await new Promise(r => setTimeout(r, 0));
-                const part = await renderPreviewItem(lib, item, rules, scale);
+                const part = await renderPreviewItem(lib, pv, item, rules, scale);
                 if (split) { chunk = [part]; chunkStart = item.index; await flush(item.index); continue; }
                 if (chunk.length && chunkHeight + part.canvas.height > MAX_IMAGE_HEIGHT_PX) await flush(items[k - 1].index);
                 if (!chunk.length) chunkStart = item.index;
@@ -1804,17 +2046,20 @@
                 chunkHeight += part.canvas.height;
             }
             await flush(items[items.length - 1].index);
+            if (preview !== pv) throw new Error('미리보기가 바뀌어 중단했습니다.');   // 마지막 칸을 그리는 사이 바뀐 경우
         } catch (error) {
             chunk.forEach(p => { p.canvas.width = p.canvas.height = 0; });
+            imageFetchStats = null;   // 실패·중단한 렌더의 통계·캐시(데이터 URL)를 다음 렌더로 넘기지 않음
             throw error;
         } finally {
             captureState = null;
             clearCaptureToast();
         }
-        if (!images.length) throw new Error('이미지를 만들지 못했습니다.');
+        if (!images.length) { imageFetchStats = null; throw new Error('이미지를 만들지 못했습니다.'); }
         reportImageFetchStats();   // 외부 이미지가 빠졌으면 여기서 한 번 안내
+        window.CopyBotUI?.liftToasts?.();
         const first = images[0];
-        return { images, count, start: preview.s, end: preview.e, kinds: { ...preview.kinds }, blob: first.blob, width: first.width, height: first.height, signature: previewSignature(settings) };
+        return { images, count, start: pv.s, end: pv.e, kinds: { ...pv.kinds }, blob: first.blob, width: first.width, height: first.height, signature: previewSignature(settings, pv) };
     }
 
     window.CopyBotCapture = {
@@ -1845,6 +2090,11 @@
         _makeZip: makeZip,
         _measureLayout: measureLayout,
         _injectIsolation: injectIsolation,
+        _stripScripts: stripScripts,
+        _waitForFrames: waitForFrames,
+        _previewSignature: previewSignature,
+        _markedChain: markedChain,
+        _showKindPopup: showKindPopup,
         _libOptions: libOptions,
         _imageFetchStats: () => imageFetchStats,
         _beginImageFetchStats: beginImageFetchStats,
@@ -1871,7 +2121,12 @@
         getSettings: function() {
             const globalRules = window.CopyBotUI?.readCaptureRules ? window.CopyBotUI.readCaptureRules('global') : [];
             const key = this.currentCharKey();
-            const charRules = (key && window.CopyBotUI?.readCaptureRules) ? window.CopyBotUI.readCaptureRules('char') : [];
+            // 화면의 봇별 규칙 목록이 아직 이전 캐릭터 것이면(패널을 닫아 둔 채 채팅을 바꾼 경우 — 목록은 패널을 열 때 갱신됨) 화면 대신 저장소에서 읽는다
+            const listKey = $('#copybot_capture_rules_char').attr('data-char-key');
+            const listStale = !!key && listKey !== key;
+            const charRules = !key ? []
+                : (listStale ? (window.CopyBotSettings?.getCaptureCharRules ? window.CopyBotSettings.getCaptureCharRules(key) : [])
+                    : (window.CopyBotUI?.readCaptureRules ? window.CopyBotUI.readCaptureRules('char') : []));
             const hideGlobal = window.CopyBotSettings?.getCaptureHideGlobal ? window.CopyBotSettings.getCaptureHideGlobal() : {};
             const hideChar = (key && window.CopyBotSettings?.getCaptureHideKinds) ? window.CopyBotSettings.getCaptureHideKinds(key) : {};
             // 페르소나 이름 항상 익명화 (2026-10-09 유저 지시, 기본 ON — 개인정보 안전장치라 기본 OFF 원칙의 명시적 예외):
@@ -1879,7 +2134,9 @@
             const personaRules = [];
             if ($('#copybot_capture_persona_anon').is(':checked')) {
                 const name1 = String(getContext()?.name1 || '').trim();
-                if (name1) personaRules.push({ from: name1, to: String($('#copybot_capture_persona_to').val() ?? 'ㅇㅇ') });
+                // 한 글자 이름은 본문의 같은 글자를 전부 바꿔 글이 깨지므로 자동 규칙에서 제외 (필요하면 유저가 규칙으로 직접 추가)
+                if (name1 && name1.length >= 2) personaRules.push({ from: name1, to: String($('#copybot_capture_persona_to').val() ?? 'ㅇㅇ') });
+                else if (name1 && !personaShortLogged) { personaShortLogged = true; debugLog('페르소나 이름이 한 글자라 자동 익명화 규칙에서 제외'); }
             }
             return {
                 anonymize: $('#copybot_capture_anonymize_toggle').attr('data-enabled') === 'true',
@@ -1896,9 +2153,32 @@
             };
         },
 
-        // 종류별 "지금 숨겨지는가" (요소 선택 UI 표시용)
+        // 종류별 "지금 미리보기에서 빠지는가" (저장된 설정 + 이번만)
         isKindHidden: function(kind) {
-            return computeHideSet(this.getSettings()).has(kind);
+            return effectiveHideSet(this.getSettings()).has(kind);
+        },
+        // 요소 목록용: 종류마다 지금 개수와 어디서 빠져 있는지.
+        // [{ kind, fixed, count, temp(이번만), bot(이 봇 고정), global(모든 봇), solo(하나씩 따로 뺀 개수), hidden }]
+        // 목록에는 지금 감지된 종류 + 이 봇에서 감지된 적 있는 종류(기록) + 이 봇에 고정해 둔 종류가 나온다
+        kindStates: function() {
+            if (!preview) return [];
+            const { global, bot } = hideSources(this.getSettings());
+            const temp = tempState();
+            const counts = preview.kinds || {};
+            const solo = {};
+            if (temp) temp.solo.forEach(loc => {
+                const el = resolveSolo(loc);
+                const kind = el && el.getAttribute ? el.getAttribute('data-cb-kind') : null;
+                if (kind) solo[kind] = (solo[kind] || 0) + 1;
+            });
+            const key = this.currentCharKey();
+            const seen = (key && window.CopyBotSettings?.getCaptureSeenKinds) ? window.CopyBotSettings.getCaptureSeenKinds(key) : [];
+            const ids = new Set([...Object.keys(counts), ...seen.filter(k => !isFixedKind(k) || KIND_ORDER.includes(k)), ...bot]);
+            return sortKindIds(ids).map(kind => {
+                const st = { kind, fixed: isFixedKind(kind), count: counts[kind] || 0, temp: !!temp && temp.kinds.has(kind), bot: bot.has(kind), global: global.has(kind), solo: solo[kind] || 0 };
+                st.hidden = st.temp || st.bot || st.global;
+                return st;
+            });
         },
         // (setKindHidden 은 아래 "요소 선택 변경" 쪽 정의 하나만 사용 — 중복 정의 제거)
 
@@ -1973,7 +2253,7 @@
                     showCaptureToast(count > 1 ? `캡처 중… ${i - s + 1}/${count} (#${i})` : `#${i} 캡처 중…`);
                     await new Promise(r => setTimeout(r, 0));   // 토스트·UI 갱신 틈
                     if (!document.querySelector(`#chat .mes[mesid="${i}"]`)) {
-                        const ok = await ensureRendered(i);
+                        const ok = await ensureMessageRendered(i);
                         if (!ok) { debugLog(`#${i} 화면에 없음 → 건너뜀`); continue; }
                     }
                     const mes = document.querySelector(`#chat .mes[mesid="${i}"]`);
@@ -2017,7 +2297,8 @@
         previewClosedByUser: false,   // ✕ 로 닫으면 true → 캡처 모드에 다시 들어가도 자동으로 안 열림 (새 캡처나 '다시 열기'면 해제)
 
         // 번호 범위 → 미리보기 열기. 빈 번호는 처음/마지막으로 채우고 한 번 더 누르게 함(범위 복사와 동일).
-        openPreview: async function(start, end, { skipFillCheck = false } = {}) {
+        // keepTemp: 같은 미리보기를 다시 만드는 경우(펼치기·익명화 변경·자동 열기)만 true → 이번만 빼기·되돌리기 스택을 잇는다. 새로 캡처하면 비운다
+        openPreview: async function(start, end, { skipFillCheck = false, keepTemp = false } = {}) {
             const $status = $('#copybot_capture_status');
             const { s, e, last, filled } = this.resolveRange(start, end);
             if (filled && !skipFillCheck) {
@@ -2027,10 +2308,14 @@
                 return false;
             }
             if (!getContext()?.chat?.length) { toastr.warning('캡처할 채팅이 없습니다.'); return false; }
-            if (this.isBusy()) { toastr.warning('이미지 만드는 중입니다. 끝나거나 중단한 뒤 다시 눌러 주십시오.'); return false; }
-            if (parseInt(end, 10) > last) { $('#copybot_capture_end').val(e); toastr.warning(`종료위치가 마지막 메시지(${last}번)로 자동 조정되었습니다.`); }
-            if (s > e) { toastr.error('시작위치는 종료위치보다 작아야 합니다.'); return false; }
+            if (this.isBusy()) { toastr.warning(BUSY_MSG); window.CopyBotUI?.liftToasts?.(); return false; }
+            // 연타: 진행 중인 열기·빌드가 있으면 새로 시작하지 않는다 (아래 catch 의 닫기가 진행 중인 빌드의 iframe 을 떼어내던 문제).
+            // previewBuilding 은 뷰포트 안정 대기(await) 뒤에야 켜지므로, 그 전 구간은 previewOpening 으로 막는다
+            if (previewBuilding || previewOpening) { toastr.info('미리보기를 만드는 중입니다. 잠시 뒤 다시 눌러 주십시오.'); window.CopyBotUI?.liftToasts?.(); return false; }
+            if (parseInt(end, 10) > last) { $('#copybot_capture_end').val(e); toastr.warning(`종료 위치가 마지막 메시지(${last}번)로 자동 조정되었습니다.`); }
+            if (s > e) { toastr.error('시작 위치는 종료 위치보다 작아야 합니다.'); return false; }
             if (e - s + 1 > HARD_LIMIT.count) { toastr.error(`한 번에 최대 ${HARD_LIMIT.count}개까지만 캡처할 수 있습니다. 범위를 나눠 주십시오.`, '', { timeOut: 5000 }); return false; }
+            previewOpening = true;
             try {
                 $status.text('미리보기 준비 중…').css('color', '');
                 const settings = this.getSettings();
@@ -2039,11 +2324,13 @@
                 if (!holder) throw new Error('미리보기 화면을 만들지 못했습니다.');
                 // 전체 화면이 떠 있는데 패널 안으로 새로 열면 전체 화면은 닫음
                 const dlg = document.getElementById('copybot_capture_dialog');
-                if (dlg && dlg.open && !dlg.contains(holder)) { try { dlg.close(); } catch (err) { /* 무시 */ } }
+                if (dlg && dlg.open && !dlg.contains(holder)) { try { dlg.close(); } catch (err) { /* 무시 */ } liftToasts(); }
                 await settleViewport();
+                if (!keepTemp) resetHideHistory();
                 await buildPreview(holder, s, e, rules);
                 this.lastRange = { s, e, chatKey: this.currentChatKey() };
                 this.previewClosedByUser = false;
+                try { window.copybot_ensureScrollGuard?.(); } catch (err) { /* 무시 */ }   // 캡처만 쓰는 유저도 문서 스크롤 가드가 걸리게
                 try { window.CopyBotSettings?.saveSettings?.(); } catch (err) { /* 무시 */ }
                 window.CopyBotUI?.updateCaptureRangeLabel?.();
                 window.CopyBotUI?.renderCaptureKinds?.();
@@ -2053,38 +2340,45 @@
                 console.error('깡갤 복사기: 미리보기 실패', error);
                 $status.text(`실패: ${error.message}`).css('color', '#e53e3e');
                 toastr.error(`미리보기 실패: ${error.message}`);
-                if (!previewBuilding) destroyPreview();   // 반쯤 만들어진 미리보기를 남기지 않음 (다른 빌드가 진행 중이면 그쪽 것은 건드리지 않음)
-                window.CopyBotUI?.closeCaptureOverlay?.();
+                // 반쯤 만들어진 미리보기를 남기지 않음 (다른 빌드가 진행 중이면 그쪽 미리보기·화면은 건드리지 않음)
+                if (!previewBuilding) { destroyPreview(); window.CopyBotUI?.closeCaptureOverlay?.(); }
                 return false;
+            } finally {
+                previewOpening = false;
             }
         },
 
         // 익명화 토글·규칙이 바뀌면 미리보기 본문도 새 규칙으로 다시 스냅샷 (미리보기 = 결과물 원칙: 본문 텍스트 익명화는 스냅샷 때 적용되므로)
         refreshPreviewRules: async function() {
-            if (!preview || previewBuilding || this.isBusy()) return false;
+            if (!preview || previewBuilding || previewOpening || this.isBusy()) return false;
+            if (closeIfChatChanged()) { toastr.info(CHAT_CHANGED_MSG); liftToasts(); return false; }
             const settings = this.getSettings();
             const rules = settings.anonymize ? normalizeRules(settings.rules) : [];
             if (JSON.stringify(rules) === JSON.stringify(preview.rules || [])) return false;
             const r = { s: preview.s, e: preview.e };
-            return this.openPreview(r.s, r.e, { skipFillCheck: true });
+            return this.openPreview(r.s, r.e, { skipFillCheck: true, keepTemp: true });
         },
 
         // 접기: 미리보기 iframe 만 내림 (기록·만든 이미지는 유지, 상자 헤더는 남음)
         closePreview: function() {
+            // 렌더 중에 미리보기를 없애면 렌더가 중간에 터짐 → 끝나거나 중단한 뒤에
+            if (this.isBusy()) { toastr.warning(BUSY_MSG); liftToasts(); return false; }
             destroyPreview();
             window.CopyBotUI?.renderCaptureHistory?.();
             this.previewClosedByUser = true;
             window.CopyBotUI?.collapseCaptureBox?.();
+            return true;
         },
         // 펼치기: 기록으로 다시 띄움
         reopenPreview: function() {
             const r = this.lastRange;
             if (!r) return false;
             this.previewClosedByUser = false;
-            return this.openPreview(r.s, r.e, { skipFillCheck: true });
+            return this.openPreview(r.s, r.e, { skipFillCheck: true, keepTemp: true });
         },
         // 비우기: 미리보기·기록·만든 이미지 전부
         clearAll: function() {
+            if (this.isBusy()) { toastr.warning(BUSY_MSG); liftToasts(); return false; }
             destroyPreview();
             resetHideHistory();
             this.clearResult();
@@ -2093,6 +2387,13 @@
             try { window.CopyBotSettings?.saveSettings?.(); } catch (err) { /* 무시 */ }
             window.CopyBotUI?.closeCaptureOverlay?.();
             window.CopyBotUI?.clearCapturePreview?.();
+            return true;
+        },
+        // 채팅이 바뀌었을 때(ui.js 의 CHAT_CHANGED 핸들러가 호출): 이전 채팅의 미리보기가 남아 있으면 닫는다. 닫았으면 true
+        onChatChanged: function() {
+            // 접어 둔 채(미리보기 없음) 다른 채팅으로 갔으면 이번만 빼기·되돌리기 스택도 함께 비운다
+            if (!preview && tempHide && !tempHide.key.startsWith(`${this.currentChatKey() || ''}|`)) resetHideHistory();
+            return closeIfChatChanged();
         },
         // 현재 채팅 식별 (기록이 같은 채팅일 때만 자동으로 미리보기 다시 열기)
         currentChatKey: function() {
@@ -2104,35 +2405,105 @@
         autoOpenPreview: function() {
             const r = this.lastRange;
             if (!r || r.chatKey !== this.currentChatKey()) return false;
-            if (preview || this.isBusy() || previewBuilding) return false;
+            if (preview || this.isBusy() || previewBuilding || previewOpening) return false;
             // 패널 안 캡처 화면이 실제로 보일 때만 (안 보이면 openCaptureOverlay 가 전체화면 modal 로 떨어져 페이지 로드 직후 화면을 덮는 사고)
             if (!$('#copybot_mode_capture').is(':visible')) return false;
             if (this.previewClosedByUser) { window.CopyBotUI?.collapseCaptureBox?.(); return false; }
-            return this.openPreview(r.s, r.e, { skipFillCheck: true });
+            return this.openPreview(r.s, r.e, { skipFillCheck: true, keepTemp: true });
         },
 
-        // 요소 선택 변경 (고정 종류=공통, 동적 블록=캐릭터별) → 미리보기 즉시 반영
-        setKindHidden: function(kind, hidden) {
+        // 항상 빼기(저장) 켜고 끄기 → 미리보기 즉시 반영.
+        // scope: 'global'(모든 봇 — 고정 종류만, ⚙ 캡처 옵션과 같은 값) / 'bot'(이 봇만). 생략하면 예전처럼 고정 종류=모든 봇, 봇 전용 블록=이 봇
+        setKindHidden: function(kind, hidden, scope) {
             const S = window.CopyBotSettings;
+            if (scope !== 'global' && scope !== 'bot') scope = isFixedKind(kind) ? 'global' : 'bot';
+            if (scope === 'global' && !isFixedKind(kind)) return false;   // 봇 전용 블록에는 모든 봇 설정이 없음
             let ok = false;
-            if (isFixedKind(kind)) {
+            // 채팅이 바뀐 뒤 남은 미리보기에서 눌렀으면 닫는다. 이 봇 설정은 새 캐릭터 키에 저장되면 안 되므로 저장하지 않음 (모든 봇 설정은 그대로 저장)
+            if (closeIfChatChanged()) {
+                toastr.info(CHAT_CHANGED_MSG); liftToasts();
+                if (scope === 'bot') return false;
+            }
+            if (scope === 'global') {
                 const optionSelect = { genimg: '#copybot_capture_images', choice: '#copybot_capture_choices', asset: '#copybot_capture_assets', stat: '#copybot_capture_statuswin' }[kind];
                 if (optionSelect) { $(optionSelect).val(hidden ? 'skip' : 'include').trigger('change'); ok = true; }
                 else if (S?.setCaptureHideGlobal) { S.setCaptureHideGlobal(kind, hidden); ok = true; }
             } else {
                 const key = this.currentCharKey();
-                if (key && S?.setCaptureHideKind) { S.setCaptureHideKind(key, kind, hidden); ok = true; }
+                if (key && S?.setCaptureHideKind) { S.setCaptureHideKind(key, botMapKey(kind), hidden); ok = true; }
             }
             if (ok) applyHiddenToPreview();
             return ok;
         },
         refreshPreviewHidden: function() { applyHiddenToPreview(); },
-        // 미리보기 꾹 누르기 팝업에서 호출: 종류 숨김 + 설정 저장 + 요소 목록 갱신
-        hideKindFromPreview: function(kind) {
-            if (!this.setKindHidden(kind, true)) { toastr.warning('이 요소는 지금 저장할 수 없습니다(캐릭터 없음).'); return false; }
-            try { window.CopyBotSettings?.saveSettings?.(); } catch (e) { /* 무시 */ }
+        // 미리보기 꾹 누르기 메뉴에서 호출. target: 누른 요소(표식 달린 것).
+        // action: 'solo'(이것만·이번만) / 'temp'(같은 종류 전부·이번만) / 'bot'(이 봇에서 항상) / 'global'(모든 봇에서 항상)
+        excludeFromPreview: function(action, target) {
+            if (!preview) return false;
+            const kind = target && target.getAttribute ? target.getAttribute('data-cb-kind') : null;
+            if (!kind) return false;
+            if (closeIfChatChanged()) { toastr.info(CHAT_CHANGED_MSG); liftToasts(); return false; }
+            const label = kindLabel(kind);
+            let msg;
+            if (action === 'solo') {
+                const loc = soloLocator(target);
+                if (!loc) return false;
+                tempState().solo.add(loc);
+                applyHiddenToPreview();
+                msg = `"${label}" 1개를 이번 미리보기에서만 뺐습니다.`;
+            } else if (action === 'temp') {
+                const n = visibleKindCount(kind);
+                tempState().kinds.add(kind);
+                applyHiddenToPreview();
+                msg = `"${label}" ${n}개를 이번 미리보기에서만 뺐습니다.`;
+            } else if (action === 'bot' || action === 'global') {
+                if (!this.setKindHidden(kind, true, action)) { toastr.warning('이 요소는 지금 저장할 수 없습니다(캐릭터 없음).'); liftToasts(); return false; }
+                try { window.CopyBotSettings?.saveSettings?.(); } catch (e) { /* 무시 */ }
+                msg = `${action === 'global' ? '모든 봇' : '이 봇'}에서 "${label}"을(를) 항상 뺍니다.`;
+            } else {
+                return false;
+            }
             window.CopyBotUI?.renderCaptureKinds?.();
-            toastr.info(`${isFixedKind(kind) ? '모든 봇' : '이 봇'}에서 "${kindLabel(kind)}"을(를) 뺐습니다. ↶ 로 되돌릴 수 있습니다.`, '', { timeOut: 3500 });
+            toastr.info(`${msg} ↶ 로 되돌릴 수 있습니다.`, '', { timeOut: 3500 });
+            liftToasts();
+            return true;
+        },
+        // 요소 목록의 체크: 끄면 이번 미리보기에서만 뺌(저장 안 함). 켜면 그 종류를 빼던 설정을 전부 풂(합집합이라 하나라도 남으면 계속 빠짐).
+        // 반환: 실패 false, 성공 { released: ['bot'|'global'] } (풀린 저장 설정 — 안내용)
+        setKindIncluded: function(kind, include) {
+            if (!preview || !kind) return false;
+            if (closeIfChatChanged()) { toastr.info(CHAT_CHANGED_MSG); liftToasts(); return false; }
+            const released = [];
+            batchHide(() => {
+                const temp = tempState();
+                if (!include) { temp.kinds.add(kind); return; }
+                temp.kinds.delete(kind);
+                const { global, bot } = hideSources(this.getSettings());
+                if (bot.has(kind) && this.setKindHidden(kind, false, 'bot')) released.push('bot');
+                if (global.has(kind) && this.setKindHidden(kind, false, 'global')) released.push('global');
+            });
+            if (released.length) { try { window.CopyBotSettings?.saveSettings?.(); } catch (e) { /* 무시 */ } }
+            return { released };
+        },
+        // 요소 목록: 그 종류에서 하나씩 따로 뺀 것을 전부 되살림
+        restoreSolo: function(kind) {
+            const temp = tempState();
+            if (!temp) return false;
+            [...temp.solo].forEach(loc => { const el = resolveSolo(loc); if (!el || el.getAttribute('data-cb-kind') === kind) temp.solo.delete(loc); });
+            applyHiddenToPreview();
+            return true;
+        },
+        // 요소 목록: 이 봇의 감지 기록에서 그 종류를 지움 (이 봇에 고정해 둔 빼기도 함께 풂). 다시 감지되면 다시 생긴다
+        forgetKind: function(kind) {
+            const S = window.CopyBotSettings;
+            if (closeIfChatChanged()) { toastr.info(CHAT_CHANGED_MSG); liftToasts(); return false; }
+            const key = this.currentCharKey();
+            if (!key || !S?.removeCaptureSeenKind) return false;
+            batchHide(() => {
+                S.removeCaptureSeenKind(key, kind);
+                if (hideSources(this.getSettings()).bot.has(kind)) this.setKindHidden(kind, false, 'bot');
+            });
+            try { S.saveSettings?.(); } catch (e) { /* 무시 */ }
             return true;
         },
         // 요소 넣고 빼기 되돌리기/다시하기 (설정도 그 시점으로). 상태: { canUndo, canRedo }
@@ -2146,6 +2517,9 @@
         // 미리보기를 다른 컨테이너로 (현재 상태 그대로 재스냅샷)
         movePreview: async function(holder) {
             if (!preview || !holder) return false;
+            if (this.isBusy()) { toastr.warning(BUSY_MSG); liftToasts(); return false; }   // 렌더 중 재스냅샷 금지 (렌더가 쓰는 미리보기를 갈아끼우게 됨)
+            if (previewBuilding || previewOpening) return false;                            // 다른 열기·옮기기가 진행 중 (겹치면 서로의 화면을 떼어냄)
+            if (closeIfChatChanged()) { toastr.info(CHAT_CHANGED_MSG); liftToasts(); return false; }
             if (holder.contains(preview.frame)) { schedulePreviewResize(); return true; }
             const items = preview.items.slice();
             await buildPreview(holder, preview.s, preview.e, preview.rules, items);
@@ -2167,12 +2541,14 @@
 
         // 미리보기 상태의 이미지가 준비돼 있으면 그대로, 아니면 렌더 (렌더는 느림 → 진행 토스트)
         ensureRendered: async function() {
+            // 채팅이 바뀐 뒤 남은 미리보기면 닫고 끝 (아래 재스냅샷이 새 채팅의 같은 번호를 찍게 됨)
+            if (closeIfChatChanged()) { toastr.info(CHAT_CHANGED_MSG); liftToasts(); return null; }
             // 익명화 규칙이 미리보기를 만들 때와 다르면 먼저 새 규칙으로 다시 스냅샷 (본문 텍스트 익명화 누락 방지)
             if (preview) {
                 const cur = this.getSettings();
                 const curRules = cur.anonymize ? normalizeRules(cur.rules) : [];
                 if (JSON.stringify(curRules) !== JSON.stringify(preview.rules || [])) {
-                    const ok = await this.openPreview(preview.s, preview.e, { skipFillCheck: true });
+                    const ok = await this.openPreview(preview.s, preview.e, { skipFillCheck: true, keepTemp: true });
                     if (!ok || !preview) throw new Error('익명화 규칙을 적용한 미리보기를 다시 만들지 못했습니다.');
                 }
             }
@@ -2195,13 +2571,15 @@
         // 미리보기 → 복사/저장. 렌더가 오래 걸려 클립보드 권한(사용자 제스처)이 만료되면 한 번 더 누르게 안내
         _delivering: false,
         deliver: async function(action = 'copy', index = 0) {
-            if (!preview) { toastr.warning('미리보기가 없습니다. 먼저 캡처를 눌러 주십시오.'); return false; }
-            if (this.isBusy() || this._delivering) { toastr.warning('이미지 만드는 중입니다. 잠시 기다려 주십시오.'); return false; }
+            try { window.copybot_ensureScrollGuard?.(); } catch (e) { /* 무시 */ }   // 캡처만 쓰는 유저도 문서 스크롤 가드가 걸리게
+            if (!preview) { toastr.warning('미리보기가 없습니다. 먼저 캡처를 눌러 주십시오.'); liftToasts(); return false; }
+            if (this.isBusy() || this._delivering) { toastr.warning('이미지 만드는 중입니다. 잠시 기다려 주십시오.'); liftToasts(); return false; }
             this._delivering = true;
             try {
                 return await this._deliverInner(action, index);
             } finally {
                 this._delivering = false;
+                liftToasts();   // 이 흐름에서 띄운 토스트(완료·실패·안내)가 크게보기 뒤에 가려지지 않게
             }
         },
         _deliverInner: async function(action, index) {

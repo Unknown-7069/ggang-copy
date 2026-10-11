@@ -16,12 +16,13 @@
     let isInitialized = false;
     let isDebugMode = false;
     let callbacks = {};
+    let floatResizeHandler = null;   // 플로팅 버튼 window resize 리스너 — teardown 때 떼기 위해 이름 있는 함수로 보관
 
-    // 인스턴스별 상태 (고정/미니)
+    // 인스턴스별 상태 (고정/미니/열림). open: 우리가 연 상태인지 — 전역 클릭마다 :visible(레이아웃 계산)을 돌리지 않으려고 먼저 보는 불리언
     const INSTANCES = ['quick', 'float'];
     const state = {
-        quick: { pinned: false, mini: false, temporarilyHidden: false },
-        float: { pinned: false, mini: false, temporarilyHidden: false },
+        quick: { pinned: false, mini: false, temporarilyHidden: false, open: false },
+        float: { pinned: false, mini: false, temporarilyHidden: false, open: false },
     };
     const POPUP_ID = { quick: 'copybot_quick_menu', float: 'copybot_float_menu' };
     const SECTION_PREFIX = { quick: 'copybot_qm_section_', float: 'copybot_fm_section_' };
@@ -40,6 +41,9 @@
             window.CopyBotUtils.debugLog(isDebugMode, ...args);
         }
     }
+
+    // HTML 속성·글자에 넣을 값 이스케이프 (아이콘 클래스·라벨 등 설정에서 온 문자열)
+    const esc = (s) => (window.CopyBotUtils?.escapeHtml ? window.CopyBotUtils.escapeHtml(String(s ?? '')) : String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])));
 
     // 저장된 아이콘 클래스 가져오기
     function getIconClass(pickerId, defaultIcon) {
@@ -72,6 +76,7 @@
     }
 
     function saveSettings(instance) {
+        if (window.copybot_resetting) return;   // 전체 초기화 중엔 어떤 저장도 하지 않음
         try {
             localStorage.setItem(STORAGE_KEYS[instance].pinned, state[instance].pinned);
             localStorage.setItem(STORAGE_KEYS[instance].mini, state[instance].mini);
@@ -98,7 +103,9 @@
             wandRegisterBound = false;
             $(document).off('click.copybot_wand_register');
         }
-        return registerWandMenu();
+        const registered = registerWandMenu();
+        teardownIfUnused();
+        return registered;
     }
 
     function registerWandMenu() {
@@ -121,7 +128,7 @@
         $extensionsMenu.append(`
             <div id="copybot_wand_container" class="extension_container interactable" tabindex="0">
                 <div id="copybot_wand_button" class="list-group-item flex-container flexGap5 interactable" tabindex="0" role="listitem" title="깡갤 복사기 퀵메뉴">
-                    <div class="fa-solid ${wandIconClass} extensionsMenuExtensionButton"></div>
+                    <div class="fa-solid ${esc(wandIconClass)} extensionsMenuExtensionButton"></div>
                     <span>깡갤 복사기</span>
                 </div>
             </div>
@@ -139,9 +146,9 @@
         if ($popup(instance).length > 0) return;
         setupEvents();   // 팝업이 처음 생길 때 비로소 전역 리스너 등록 (미사용 시 무영향)
 
-        const tagRemoveIcon = getIconClass('copybot_tag_remove_icon_picker', 'fa-tags');
-        const deleteIcon = getIconClass('copybot_delete_icon_picker', 'fa-trash');
-        const deleteRegenIcon = getIconClass('copybot_delete_regenerate_icon_picker', 'fa-redo');
+        const tagRemoveIcon = esc(getIconClass('copybot_tag_remove_icon_picker', 'fa-tags'));
+        const deleteIcon = esc(getIconClass('copybot_delete_icon_picker', 'fa-trash'));
+        const deleteRegenIcon = esc(getIconClass('copybot_delete_regenerate_icon_picker', 'fa-redo'));
 
         const html = `
             <div id="${POPUP_ID[instance]}" class="copybot_quick_menu_popup" data-instance="${instance}">
@@ -169,7 +176,7 @@
                         <div class="copybot_quick_menu_section_title">작성</div>
                         <div class="copybot_quick_row">
                             <button class="copybot_quick_btn_third" data-action="remove_tags" title="입력창 태그 제거">
-                                <i class="fa-solid ${tagRemoveIcon}" data-icon-type="tag_remove"></i><span class="copybot_btn_text">태그제거</span>
+                                <i class="fa-solid ${tagRemoveIcon}" data-icon-type="tag_remove"></i><span class="copybot_btn_text">태그 제거</span>
                             </button>
                             <button class="copybot_quick_btn_third" data-action="delete_last" title="마지막 메시지 삭제">
                                 <i class="fa-solid ${deleteIcon}" data-icon-type="delete"></i><span class="copybot_btn_text">삭제</span>
@@ -264,8 +271,8 @@
             $grid.empty();
             slots.forEach(slot => {
                 $grid.append(`
-                    <button class="copybot_quick_btn_third" data-action="custom" data-custom-action="${slot.action}" title="${slot.label}">
-                        <i class="fa-solid ${slot.iconClass}"></i><span class="copybot_btn_text">${slot.label}</span>
+                    <button class="copybot_quick_btn_third" data-action="custom" data-custom-action="${esc(slot.action)}" data-custom-slot="${slot.index}" title="${esc(slot.label)}">
+                        <i class="fa-solid ${esc(slot.iconClass)}"></i><span class="copybot_btn_text">${esc(slot.label)}</span>
                     </button>
                 `);
             });
@@ -304,7 +311,8 @@
                 const action = $btn.data('action');
                 if (action === 'custom') {
                     const customAction = $btn.attr('data-custom-action');
-                    if (callbacks.runAction && customAction) callbacks.runAction(customAction);
+                    const slotIndex = Number($btn.attr('data-custom-slot'));
+                    if (callbacks.runAction && customAction) callbacks.runAction(customAction, Number.isInteger(slotIndex) ? slotIndex : undefined, this);
                     if (!state[instance].pinned) hideMenu(instance);
                     return;
                 }
@@ -314,8 +322,9 @@
         // 외부 클릭 시 닫기 (고정 모드 제외)
         $(document).off('mousedown.copybot_quick_outside').on('mousedown.copybot_quick_outside', function(e) {
             INSTANCES.forEach(instance => {
+                if (!state[instance].open || state[instance].pinned) return;   // 열지 않은 메뉴는 DOM 조회 없이 통과
                 const $menu = $popup(instance);
-                if (!$menu.is(':visible') || state[instance].pinned) return;
+                if (!$menu.is(':visible')) { state[instance].open = false; return; }
                 const $t = $(e.target);
                 if ($t.closest(`#${POPUP_ID[instance]}`).length) return;
                 if ($t.closest('#copybot_wand_container, #extensionsMenu, #copybot_float_button, #copybot_quickmenu_input_icon_btn').length) return;
@@ -356,7 +365,7 @@
         // ESC 로 닫기
         $(document).off('keydown.copybot_quick_esc').on('keydown.copybot_quick_esc', function(e) {
             if (e.key !== 'Escape') return;
-            INSTANCES.forEach(instance => { if ($popup(instance).is(':visible')) hideMenu(instance); });
+            INSTANCES.forEach(instance => { if (state[instance].open && $popup(instance).is(':visible')) hideMenu(instance); });
         });
 
         // 복사 범위 입력 변경 시 "전체 복사" 모드 해제
@@ -370,6 +379,25 @@
         setupSillyTavernMenuObserver();
 
         debugLog('✅ 퀵/플로팅 메뉴 이벤트 핸들러 설정 완료');
+    }
+
+    // 퀵메뉴·플로팅 메뉴가 둘 다 꺼졌으면 켜 둘 때 만든 전역 리스너·DOM 을 전부 걷어낸다 (켰다 끈 뒤 잔존 방지, §7 미사용 시 무영향)
+    // 설정을 읽을 수 없으면 아무것도 지우지 않는다 (판단 불가 → 현 상태 유지)
+    function teardownIfUnused() {
+        if (!callbacks.getQuickMenuSettings || !callbacks.getFloatMenuSettings) return false;
+        const quick = callbacks.getQuickMenuSettings() || {};
+        const float = callbacks.getFloatMenuSettings() || {};
+        if (quick.enabled || float.enabled) return false;
+        const hasDom = !!(document.getElementById(POPUP_ID.quick) || document.getElementById(POPUP_ID.float) || document.getElementById('copybot_float_button'));
+        if (!eventsBound && !hasDom && !floatResizeHandler) return false;   // 이미 깨끗함
+        $(document).off('.copybot_wand .copybot_quick_btn .copybot_quick_outside .copybot_quick_toggle .copybot_quick_icon .copybot_quick_esc .copybot_copy_range .copybot_drawer_detect .copybot_restore_check');
+        $(window).off('.copybot_menu_reposition');
+        removeFloatResizeHandler();
+        $('#copybot_quick_menu, #copybot_float_menu, #copybot_float_button').remove();
+        INSTANCES.forEach(instance => { state[instance].open = false; state[instance].temporarilyHidden = false; state[instance].anchor = null; });
+        eventsBound = false;
+        debugLog('퀵·플로팅 메뉴 모두 OFF — 리스너·DOM 정리');
+        return true;
     }
 
     // ===================================================================
@@ -406,13 +434,14 @@
                 const $menu = $popup(instance);
                 if ($menu.is(':visible')) {
                     state[instance].temporarilyHidden = true;
+                    state[instance].open = false;
                     $menu.hide();
                 }
             });
         }
 
         $(document).off('click.copybot_drawer_detect').on('click.copybot_drawer_detect', '.drawer-toggle', function() {
-            const anyVisible = INSTANCES.some(i => $popup(i).is(':visible'));
+            const anyVisible = INSTANCES.some(i => state[i].open && $popup(i).is(':visible'));
             const anyHidden = INSTANCES.some(i => state[i].temporarilyHidden);
             if (anyVisible) {
                 setTimeout(() => { if (getOpenDrawerCount() > 0) hideTemporarily(); }, 150);
@@ -460,8 +489,19 @@
         } else {
             $menu.css({ position: 'fixed', top: 5, left: 5, right: 'auto', bottom: 'auto', transform: 'none', zIndex: 10001 });
         }
+        state[instance].open = true;
         $menu.fadeIn(150);
         debugLog(`메뉴 열림 (${instance})`);
+    }
+
+    // 스크롤러 단일화: 팝업은 overflow hidden, 내용 칸만 "화면 높이 - 16 - (푸터·여백)" 까지 늘고 넘치면 그 안에서 스크롤
+    function fitMenuHeight($menu, vh) {
+        const $content = $menu.find('.copybot_quick_menu_content');
+        $menu.css({ maxHeight: 'none', overflowY: 'hidden' });
+        $content.css({ maxHeight: 'none', overflowY: 'auto' });
+        const extra = Math.max(0, ($menu.outerHeight() || 0) - ($content.outerHeight() || 0));   // 푸터 + 테두리·여백
+        $content.css({ maxHeight: Math.max(80, vh - 16 - extra) });
+        $menu.css({ maxHeight: Math.max(120, vh - 16) });
     }
 
     // 기준 요소 위쪽(안 되면 아래쪽)에, 화면 안에 들어오도록 배치. keepVisible: 열린 채로 다시 배치할 때
@@ -469,7 +509,7 @@
         const vw = window.innerWidth, vh = window.innerHeight;
         if (!keepVisible) $menu.css({ position: 'fixed', transform: 'none', zIndex: 10001, visibility: 'hidden', display: 'block' });
         else $menu.css({ position: 'fixed', transform: 'none', zIndex: 10001 });
-        $menu.css({ maxHeight: Math.max(120, vh - 16), overflowY: 'auto' });   // 화면보다 길면 메뉴 안에서 스크롤
+        fitMenuHeight($menu, vh);   // 화면보다 길면 내용 칸(.copybot_quick_menu_content) 하나만 스크롤 — 팝업 자체는 스크롤하지 않음
         const mw = $menu.outerWidth() || 260;
         const mh = $menu.outerHeight() || 300;
         const r = anchorEl.getBoundingClientRect();
@@ -498,6 +538,7 @@
         positionMenuNear($menu, anchor, true);
     }
     function hideMenu(instance) {
+        state[instance].open = false;
         $popup(instance).fadeOut(100);
     }
 
@@ -522,6 +563,7 @@
     }
 
     function saveFloatPosition(x, y) {
+        if (window.copybot_resetting) return;   // 전체 초기화 중엔 어떤 저장도 하지 않음
         try { localStorage.setItem(STORAGE_KEY_FLOAT_POS, JSON.stringify({ x, y })); } catch (e) { /* 무시 */ }
     }
 
@@ -553,9 +595,14 @@
     function refreshFloatButton() {
         const settings = callbacks.getFloatMenuSettings ? callbacks.getFloatMenuSettings() : { enabled: false, iconClass: 'fa-bolt' };
         if (!settings.enabled) {
-            // OFF: 버튼을 만들지 않는다. 이미 있으면(켰다 끈 경우) 숨김
-            const $existing = $('#copybot_float_button');
-            if ($existing.length) { $existing.hide(); hideMenu('float'); }
+            // OFF: 버튼을 만들지 않는다. 이미 있으면(켰다 끈 경우) 버튼·플로팅 메뉴·resize 리스너를 걷어냄
+            if ($('#copybot_float_button').length || $popup('float').length) {
+                state.float.open = false;
+                state.float.temporarilyHidden = false;
+                $('#copybot_float_button, #copybot_float_menu').remove();
+            }
+            removeFloatResizeHandler();
+            teardownIfUnused();
             return;
         }
         setupFloatButton();   // 버튼 생성 + 드래그 리스너 (1회)
@@ -564,12 +611,13 @@
         createMenuPopup('float');
         $btn.css('display', 'flex');
         applyFloatPosition(loadFloatPosition() || defaultFloatPosition());
+        teardownIfUnused();
     }
 
     function resetFloatPosition() {
         try { localStorage.removeItem(STORAGE_KEY_FLOAT_POS); } catch (e) { /* 무시 */ }
-        ensureFloatButton();
-        applyFloatPosition(defaultFloatPosition());
+        // 플로팅 메뉴가 꺼져 있으면 버튼을 새로 만들지 않는다 (저장 위치만 지움 → 다음에 켤 때 기본 위치)
+        if ($('#copybot_float_button').length) applyFloatPosition(defaultFloatPosition());
     }
 
     function setupFloatButton() {
@@ -616,13 +664,21 @@
         btn.addEventListener('pointerup', finish);
         btn.addEventListener('pointercancel', finish);
 
-        // 화면 회전/크기 변경 시 화면 밖으로 나가지 않게
-        window.addEventListener('resize', () => {
-            if ($('#copybot_float_button').is(':visible')) {
-                const rect = btn.getBoundingClientRect();
-                applyFloatPosition({ x: rect.left, y: rect.top });
-            }
-        });
+        // 화면 회전/크기 변경 시: 지금 위치가 아니라 "저장 위치"를 새 화면 안에 다시 맞춘다
+        // (현재 위치 기준으로 clamp 하면 키보드가 올라와 화면이 줄 때 밀린 위치가 굳어 버튼이 떠다님)
+        removeFloatResizeHandler();
+        floatResizeHandler = () => {
+            if (dragging) return;
+            if (!btn.isConnected || !$('#copybot_float_button').is(':visible')) return;
+            applyFloatPosition(loadFloatPosition() || defaultFloatPosition());
+        };
+        window.addEventListener('resize', floatResizeHandler);
+    }
+
+    function removeFloatResizeHandler() {
+        if (!floatResizeHandler) return;
+        window.removeEventListener('resize', floatResizeHandler);
+        floatResizeHandler = null;
     }
 
     // ===================================================================
@@ -632,49 +688,33 @@
     function handleQuickAction(action, instance = 'quick') {
         debugLog('퀵액션 실행:', action, instance);
         const $menu = $popup(instance);
-        const msgRange = callbacks.getMessageRange ? callbacks.getMessageRange() : { lastIndex: 0 };
+        const msgRange = (callbacks.getMessageRange && callbacks.getMessageRange()) || { lastIndex: 0 };
         const val = (cls) => $menu.find(`.${cls}`).val();
         const clear = (...classes) => classes.forEach(cls => $menu.find(`.${cls}`).val(''));
+        // 입력값 없는 동작은 actions.js 레지스트리 한 곳으로 (§2-5: 커스텀 버튼·아이콘과 같은 구현, 삭제 확인도 그쪽 경로가 담당)
+        const REGISTRY_ACTION = { jump_first: 'jump_first', jump_last: 'jump_last_top', remove_tags: 'remove_tags', delete_last: 'delete_last', delete_regen: 'delete_regen' };
 
         switch (action) {
-            // === 📍 이동 ===
+            // === 📍 이동 / ✏️ 작성 (레지스트리 경유) ===
             case 'jump_first':
-                if (confirm('첫 메시지로 이동합니다.\n\n채팅이 많을 경우 렉이 발생할 수 있습니다.\n정말 이동하시겠습니까?')) {
-                    if (callbacks.jumpToMessage) callbacks.jumpToMessage(0, '첫 메시지로 이동!');
-                } else {
-                    return;
-                }
-                break;
-
             case 'jump_last':
-                if (callbacks.jumpToMessage) callbacks.jumpToMessage('last', '마지막 메시지로 이동!');
+            case 'remove_tags':
+            case 'delete_last':
+            case 'delete_regen':
+                if (callbacks.runAction) callbacks.runAction(REGISTRY_ACTION[action]);
+                else toastr.error('동작을 실행할 수 없습니다.');
                 break;
 
             case 'jump_to': {
                 const jumpNum = val('copybot_qm_jump_num');
                 if (!jumpNum) {
-                    toastr.warning('이동할 메시지 번호를 입력해야 합니다');
+                    toastr.warning('이동할 메시지 번호를 입력해야 합니다.');
                     return;
                 }
-                if (callbacks.jumpToMessage) callbacks.jumpToMessage(jumpNum, `메시지 #${jumpNum}로 이동!`);
+                if (callbacks.jumpToMessage) callbacks.jumpToMessage(jumpNum, `메시지 #${jumpNum}로 이동했습니다.`);
                 clear('copybot_qm_jump_num');
                 break;
             }
-
-            // === ✏️ 작성 ===
-            case 'remove_tags':
-                if (callbacks.removeTagsFromElement) callbacks.removeTagsFromElement('#send_textarea');
-                break;
-
-            case 'delete_last':
-                if (callbacks.deleteLastMessage) callbacks.deleteLastMessage();
-                else if (callbacks.executeSimpleCommand) callbacks.executeSimpleCommand('/del 1', '마지막 메시지 삭제');
-                break;
-
-            case 'delete_regen':
-                if (callbacks.deleteAndRegenerate) callbacks.deleteAndRegenerate();
-                else if (callbacks.smartDeleteAndRegenerate) callbacks.smartDeleteAndRegenerate();
-                break;
 
             // === 📝 복사 ===
             case 'copy_range': {
@@ -707,11 +747,16 @@
                 const s = val('copybot_qm_hide_start');
                 const e = val('copybot_qm_hide_end');
                 if (!s && !e) {
-                    toastr.warning(action === 'hide_messages' ? '숨길 메시지 범위를 입력해야 합니다' : '보일 메시지 범위를 입력해야 합니다');
+                    toastr.warning(action === 'hide_messages' ? '숨길 메시지 범위를 입력해야 합니다.' : '보일 메시지 범위를 입력해야 합니다.');
                     return;
                 }
-                const sNum = parseInt(s) || 0;
-                const eNum = parseInt(e) || msgRange.lastIndex;
+                // 빈칸만 기본값(시작 0 / 끝 마지막)으로 — '0' 은 0 그대로 (예전 `parseInt(e) || last` 는 0~0 을 전체로 바꿨음)
+                const idx = (v, fb) => (v === '' || v == null) ? fb : parseInt(v, 10);
+                const sNum = idx(s, 0), eNum = idx(e, msgRange.lastIndex);
+                if (!Number.isInteger(sNum) || !Number.isInteger(eNum)) {
+                    toastr.error('올바른 범위를 숫자로 입력해야 합니다.');
+                    return;
+                }
                 const fn = action === 'hide_messages' ? callbacks.executeHideCommand : callbacks.executeUnhideCommand;
                 if (fn) fn(sNum, eNum);
                 clear('copybot_qm_hide_start', 'copybot_qm_hide_end');
@@ -723,12 +768,12 @@
                 const delStart = val('copybot_qm_del_start');
                 const delEnd = val('copybot_qm_del_end');
                 if (!delStart || !delEnd) {
-                    toastr.warning('삭제할 메시지 범위를 입력해야 합니다');
+                    toastr.warning('삭제할 메시지 범위를 입력해야 합니다.');
                     return;
                 }
                 const ds = parseInt(delStart, 10), de = parseInt(delEnd, 10);
                 if (isNaN(ds) || isNaN(de)) {
-                    toastr.error('올바른 범위를 숫자로 입력해야 합니다');
+                    toastr.error('올바른 범위를 숫자로 입력해야 합니다.');
                     return;
                 }
                 // 범위 검증(마지막 메시지 초과 포함)·경고창·/cut 실행은 messageOperations.executeMultiDelete 한 곳에서만 (중복 구현 금지, 2026-10-09)
@@ -801,6 +846,7 @@
 
         if (state[instance].pinned && $popup(instance).is(':visible')) {
             state[instance].temporarilyHidden = true;
+            state[instance].open = false;
             $popup(instance).hide();
         }
 
