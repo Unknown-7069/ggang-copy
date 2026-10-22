@@ -399,6 +399,7 @@
         try { me.detachAfterData?.(); } catch (e) { /* 무시 */ }
         try { me.restoreToastr?.(); } catch (e) { /* 무시 */ }
         try { me.unbindEvents?.(); } catch (e) { /* 무시 */ }
+        try { me.unwatchStopButton?.(); } catch (e) { /* 무시 */ }
         if (me.uiDeactivated) {
             // 재시도 대기 중 우리가 잠가 둔 전송 버튼은 반드시 우리가 푼다 (잠긴 채로 남기지 않는다)
             me.uiDeactivated = false;
@@ -785,19 +786,37 @@
                 }
             };
 
+            // 대기 중(남의 생성이 끝나길 기다리는 동안) 유저가 입력필드의 정지(■) 버튼을 누르면 "전부 멈춰라"로 본다 → 우리 예약도 취소.
+            // (■ 는 남의 생성을 멈추고, 그 직후 우리가 지우고 요청하면 유저가 멈춘 자리에서 생성이 다시 시작되는 꼴이 된다, 2026-10-22)
+            // 리스너는 대기하는 동안만 건다. 실리 이벤트(GENERATION_STOPPED)로 보지 않는 이유: 우리가 [중단]한 앞 요청을 정리하며 내는 같은 이벤트와 구분이 안 된다
+            let stopPressed = false;
+            const watchStopButton = () => {
+                stopPressed = false;
+                $(document).off('click.copybot_wait_stop').on('click.copybot_wait_stop', '#mes_stop', () => { stopPressed = true; });
+                me.unwatchStopButton = () => { me.unwatchStopButton = null; $(document).off('click.copybot_wait_stop'); };
+            };
+            const unwatchStopButton = () => { if (me.unwatchStopButton) me.unwatchStopButton(); };
+
             try {
                 // 1) 다른 생성이 진행 중이면(또는 방금 중단한 우리 요청이 아직 정리되지 않았으면) 끝날 때까지 대기 (사유 표시).
                 //    여기서의 [예약 취소]는 다른 생성을 끊지 않는다
                 if (isBusy() || hasAbortedInFlight()) {
                     me.stage = 'waiting';
                     showStageToast(`대기 중: ${this.describeBusyReason()}`, { abortLabel: '예약 취소' });
-                    const idle = await waitUntil(() => !isBusy() && !hasAbortedInFlight(), {
+                    watchStopButton();
+                    const idle = await waitUntil(() => stopPressed || (!isBusy() && !hasAbortedInFlight()), {
                         timeoutMs: WAIT_LIMIT_MS,
                         intervalMs: 500,
                         isCancelled: dead,
                         onTick: (sec) => { if (!dead()) showStageToast(`대기 중: ${this.describeBusyReason()} (${fmt(sec)})`, { abortLabel: '예약 취소' }); },
                     });
+                    unwatchStopButton();
                     if (dead()) return false;
+                    if (stopPressed) {
+                        releasePipeline(me);
+                        toastr.info('정지 버튼이 눌려 재생성 예약을 취소했습니다.', '', { timeOut: 2000 });
+                        return false;
+                    }
                     if (!idle) {
                         releasePipeline(me);
                         toastr.error('5분이 지나도 생성이 끝나지 않아 재생성을 취소했습니다. 먼저 중단(■)해 주십시오.');
@@ -841,19 +860,22 @@
                 // 되돌릴 때, 그 사이 다른 코드가 그 위에 덧씌워 놓았으면 건드리지 않는다(남의 것을 덮지 않게). 우리 것은 끝난 뒤엔 그냥 통과만 시킨다
                 me.restoreToastr = () => { if (toastr.error === captureToastrError) toastr.error = origToastrError; };
 
-                // 첫 시도 타입: 봇 메시지면 regenerate(삭제+재생성 한 번에), 유저 메시지면 지우고
+                // 첫 시도 타입: 봇 메시지면 regenerate(실리가 삭제+재생성을 한 번에), 유저 메시지면 우리가 지우고
                 //  지운 뒤 마지막이 유저 메시지면 regenerate(입력창 안 읽음), 봇 메시지면 normal(초안 보호)
+                // 그룹 채팅: 실리의 Generate('regenerate') 는 그룹이면 멤버별 'normal' 생성으로 바뀌어 아무것도 지우지 않는다 → 봇 메시지여도 우리가 지운다
                 let type = 'regenerate';
-                if (lastIsUser) {
+                if (lastIsUser || (isGroup && lastMessage)) {
                     if (dead()) return false;
-                    deletedUserText = String(lastMessage.mes || '');
+                    if (lastIsUser) deletedUserText = String(lastMessage.mes || '');
                     const deleted = await this.deleteLastMessage({ confirm: false, silent: true });
-                    if (!deleted) { deletedUserText = ''; throw new Error('마지막 유저 메시지 삭제 실패'); }
+                    if (!deleted) { deletedUserText = ''; throw new Error('마지막 메시지 삭제 실패'); }
                     lenAfterDelete = context.chat.length;
                     type = context.chat[context.chat.length - 1]?.is_user ? 'regenerate' : 'normal';
                 }
-                const firstType = type;
-                let lastAttemptBaseLen = context.chat.length;   // 각 시도 직전의 메시지 수 (재시도 타입 판정용)
+                // 이 파이프라인이 지워도 되는 것은 ① 첫 시도의 그 한 개 ② 실패한 시도가 남긴 조각(그 시도 중에 새로 생긴 봇 메시지)뿐이다.
+                // 재시도 타입은 "지금 마지막 메시지가 무엇인가"로만 정한다 — 첫 시도가 regenerate 였다는 이유로 계속 regenerate 를 쓰면,
+                // 마지막이 시스템/해설 메시지처럼 유저 메시지가 아닌 것일 때 실리가 재시도마다 한 개씩 더 지운다 (2026-10-22 유저 보고).
+                let beforeAttempt = new Set();                   // 시도 직전에 있던 메시지 객체들 (조각 판정은 정체성으로)
 
                 // 한 번의 생성 시도. 반환: { ok, stopped, cancelled, reason }
                 const attemptOnce = async (genType) => {
@@ -862,7 +884,7 @@
                     me.stage = 'requesting';
                     lastErrorText = '';
                     const lenBefore = context.chat.length;
-                    lastAttemptBaseLen = lenBefore;
+                    beforeAttempt = new Set(context.chat);
                     const mesBefore = context.chat[lenBefore - 1]?.mes;
                     const startMark = me.starts.length;   // 이 시도에서 generate 를 부른 뒤에 시작된 "실제 생성"만 본다
                     const calledAt = Date.now();
@@ -1000,10 +1022,22 @@
                         stopWatchOff = off;
                     };
 
-                    const started = await Promise.race([startedPromise, settled.then(() => (generateFailed ? 'failed-early' : 'finished-early'))]);
+                    const settledTag = settled.then(() => (generateFailed ? 'failed-early' : 'finished-early'));
+                    let started = await Promise.race([startedPromise, settledTag]);
                     startedPromise.cancel();
+                    if (!started && !generateSettled && !dead()) {
+                        // 15초 안에 시작 이벤트가 없지만 generate() 는 아직 살아 있다(탭이 얼었다 풀렸거나 실리가 매우 느림).
+                        // 여기서 실패로 치고 재요청하면 요청이 겹쳐 실리가 메시지를 두 번 지우거나 응답이 둘 생긴다 → 끝나거나 시작할 때까지 기다린다
+                        showStageToast('실리 응답 대기 중…');
+                        const lateStart = onceEvent(context.event_types.GENERATION_STARTED, { timeoutMs: 15 * 60 * 1000 });
+                        let stopPoll = false;   // 취소 감시 폴링은 이 대기가 끝나면 바로 멈춘다 (파이프라인 끝까지 남지 않게)
+                        const deadPoll = (async () => { while (!stopPoll && !dead()) await delay(300); return false; })();
+                        started = await Promise.race([lateStart, settledTag, deadPoll]);
+                        stopPoll = true;
+                        lateStart.cancel();
+                    }
                     if (dead()) { attemptCleanup(); await waitSettled(15000); return { cancelled: true }; }
-                    if (!started) { attemptCleanup(); return { ok: false, reason: '15초 안에 생성이 시작되지 않음' }; }
+                    if (!started) { attemptCleanup(); return { ok: false, reason: '생성이 시작되지 않음' }; }
                     if (started === 'failed-early') {
                         // 요청 자체가 시작도 못 하고 실패 (서버 연결 불가 등)
                         attemptCleanup();
@@ -1024,9 +1058,11 @@
                     showStageToast(requestingText());
 
                     // 비어있지 않은 새 봇 응답이 생겼는가 (도착 이벤트가 있으면 같은 글이 다시 와도 인정)
+                    // 실리는 스트리밍을 시작하며 '...' 자리표시 메시지를 먼저 넣고, 스트림이 끊기면 그 메시지를 그대로 둔 채 도착 이벤트까지 보낸다 → '...' 는 응답이 아니다
                     const replyPresent = () => {
                         const last = context.chat[context.chat.length - 1];
-                        return !!last && !last.is_user && (last.mes || '').trim().length > 0
+                        const text = String(last?.mes || '').trim();
+                        return !!last && !last.is_user && text.length > 0 && text !== '...'
                             && (receivedEvent || context.chat.length > lenBefore || last.mes !== mesBefore);
                     };
 
@@ -1104,17 +1140,30 @@
                     if (chatChanged()) throw new Error('채팅이 바뀌어 재생성을 취소했습니다.');
 
                     // 재시도 대기: 빈 구간에도 입력창 정지(■) 버튼을 유지해 유저가 수동 중단할 수 있게 함
-                    // 다음 시도 타입 = "같은 요청을 그대로 다시" (유저가 비행기 버튼을 누르는 것과 다르게):
-                    //  • 첫 시도가 regenerate 였으면 계속 regenerate — 실패 뒤 마지막이 유저 메시지면 그 메시지에 다시 답하고,
-                    //    끊긴 조각(부분 응답)이 남아 있으면 그걸 지우고 다시 만든다. 입력창은 읽지 않는다.
-                    //  • 첫 시도가 normal(유저 메시지 삭제 → 이전 봇 메시지 뒤에 새 응답)이었으면, 실패한 시도가 조각을 남겼을 때만
-                    //    regenerate(조각 제거 + 재요청), 아무것도 안 남았으면 다시 normal(초안 보호로 입력창 내용은 안 보냄).
+                    // 다음 시도 타입 = "같은 요청을 그대로 다시" (유저가 비행기 버튼을 누르는 것과 다르게). 무엇을 더 지우느냐가 핵심:
+                    //  • 실패한 시도가 조각(그 시도 중 새로 생긴 봇 메시지 — '...' 자리표시·끊긴 부분 응답)을 남겼으면 regenerate 로 그 조각만 지우고 다시.
+                    //  • 조각이 없고 마지막이 유저 메시지면 regenerate(실리는 유저 메시지를 지우지 않고 입력창도 안 읽는다).
+                    //  • 조각이 없고 마지막이 유저 메시지가 아니면(봇·시스템·해설) normal + 초안 보호 — regenerate 를 쓰면 실리가 그 메시지를 지운다.
+                    //    (첫 시도가 regenerate 였다고 계속 regenerate 를 쓰던 예전 규칙이 재시도마다 한 개씩 더 지우던 원인, 2026-10-22)
+                    //  • 그룹 채팅은 실리 regenerate 가 아무것도 지우지 않으므로 조각은 우리가 지우고 normal 로.
                     const lenAtFail = context.chat.length;
-                    const lastNow = context.chat[lenAtFail - 1];
+                    let lastNow = context.chat[lenAtFail - 1];
                     const tailKey = (m) => (m ? `${m.is_user ? 'u' : 'b'}|${m.send_date ?? ''}|${m.mes ?? ''}` : '');
-                    const tailAtFail = tailKey(lastNow);
-                    const leftover = context.chat.length > lastAttemptBaseLen && lastNow && !lastNow.is_user;
-                    type = (firstType === 'regenerate' || leftover || lastNow?.is_user) ? 'regenerate' : 'normal';
+                    // 조각 = 이 시도 전엔 없던 새 객체이면서 본문이 비었거나 '...' 인 것. 본문 조건까지 두는 이유: 다른 확장이 채팅을 통째로
+                    // 다시 불러오면(객체가 전부 새것) 진짜 메시지도 "새 객체"가 되는데, 그것을 조각으로 보고 지우면 안 된다. 본문이 있는 새 봇 메시지는
+                    // 위 replyPresent 가 응답으로 인정해 여기까지 오지 않으므로, 진짜 조각이 이 조건에 걸리지 않는 경우는 없다
+                    const tailText = String(lastNow?.mes || '').trim();
+                    const leftover = !!lastNow && !lastNow.is_user && !beforeAttempt.has(lastNow) && (tailText === '' || tailText === '...');
+                    if (leftover && isGroup) {
+                        const removed = await this.deleteLastMessage({ confirm: false, silent: true });
+                        if (!removed) throw new Error('실패한 시도가 남긴 조각을 지우지 못했습니다.');
+                        lastNow = context.chat[context.chat.length - 1];
+                    }
+                    // 첫 시도가 지우기 전에 실패해(서버 연결 불가 등) 원래 지우려던 그 봇 메시지가 아직 마지막이면, 그것은 지워도 되는 한 개다
+                    const originalStillLast = !isGroup && !!lastMessage && !lastIsUser && lastNow === lastMessage;
+                    type = ((leftover && !isGroup) || originalStillLast || lastNow?.is_user) ? 'regenerate' : 'normal';
+                    const lenBeforeWait = context.chat.length;
+                    const tailBeforeWait = tailKey(lastNow);
                     me.stage = 'retry-wait';
                     me.lockMark = me.starts.length;   // 잠근 뒤에 다른 생성이 시작됐는지 보려고 (시작됐으면 그 생성이 끝나길 기다렸다가 푼다)
                     if (typeof context.deactivateSendButtons === 'function') { context.deactivateSendButtons(); me.uiDeactivated = true; }
@@ -1139,13 +1188,21 @@
                     if (me.starts.length > me.lockMark && isBusy()) {
                         me.stage = 'waiting';
                         const remainMs = Math.max(0, retryWindowMs - (Date.now() - retryStartedAt));
-                        await waitUntil(() => !isBusy(), {
+                        watchStopButton();   // 이 대기 중의 ■ 도 "전부 멈춰라"
+                        await waitUntil(() => stopPressed || !isBusy(), {
                             timeoutMs: Math.min(30000, remainMs),
                             intervalMs: 500,
                             isCancelled: dead,
                             onTick: (sec) => { if (!dead()) showStageToast(`대기 중: ${this.describeBusyReason()} (${fmt(sec)})`, { abortLabel: '예약 취소' }); },
                         });
+                        unwatchStopButton();
                         if (dead()) { offerDeletedTextRestore(); return false; }
+                        if (stopPressed) {
+                            releasePipeline(me);
+                            toastr.info('정지 버튼이 눌려 재시도를 중단했습니다.', '', { timeOut: 2000 });
+                            offerDeletedTextRestore();
+                            return true;
+                        }
                     }
                     if (me.uiDeactivated) {
                         me.uiDeactivated = false;
@@ -1153,8 +1210,19 @@
                     }
                     // 쉬는 사이 채팅이 달라졌으면(유저가 직접 보냈거나, 다른 것이 메시지를 넣거나 지움) "같은 요청을 다시"가 성립하지 않는다.
                     // 그대로 재요청하면 방금 생긴 메시지를 지우고 다시 만들게 된다 → 그만둔다
-                    if (context.chat.length !== lenAtFail || tailKey(context.chat[context.chat.length - 1]) !== tailAtFail) {
+                    if (context.chat.length !== lenBeforeWait || tailKey(context.chat[context.chat.length - 1]) !== tailBeforeWait) {
                         throw new Error('쉬는 사이 채팅이 바뀌어 재요청을 취소했습니다.');
+                    }
+                    // 탭이 얼었다 풀리면(폰에서 다른 앱을 쓰다 돌아옴) 위 대기 타이머가 한참 뒤에 깨어난다. 그때 5분 창이 이미 지났으면
+                    // 조용히 그만둔다 — 유저가 잊은 지 오래인 요청이 창을 다시 켜는 순간 나가면 안 된다 (2026-10-22)
+                    if (Date.now() - retryStartedAt > retryWindowMs) {
+                        throw new Error(`${Math.round(retryWindowMs / 60000)}분이 지나 재요청을 그만뒀습니다 — ${result.reason || '요청 실패'}`);
+                    }
+                    // 앞 시도의 generate() 가 아직 안 끝났으면(얼었던 탭·느린 서버) 끝날 때까지 기다린다 — 겹쳐 보내면 실리가 두 번 지운다
+                    if (unsettledGenerates > 0) {
+                        await waitUntil(() => unsettledGenerates === 0, { timeoutMs: 30000, intervalMs: 200, isCancelled: dead });
+                        if (dead()) { offerDeletedTextRestore(); return false; }
+                        if (unsettledGenerates > 0) throw new Error('앞 요청이 끝나지 않아 재요청을 취소했습니다.');
                     }
                 }
                 return false;
