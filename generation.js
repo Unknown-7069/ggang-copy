@@ -497,16 +497,11 @@
             sub(et.GENERATE_AFTER_DATA, (_data, dryRun) => { if (dryRun !== true) request(); });
             sub(et.GENERATION_ENDED, request);
             sub(et.GENERATION_STOPPED, request);
-            // 안전망(15초): 읽기가 확인됐으면 되돌린다. 그때까지 실리가 입력창을 한 번도 읽지 않았으면(서버가 멈췄거나 아주 느림)
-            // 자동으로는 되돌리지 않는다 — 지금 되돌리면 실리가 뒤늦게 진행할 때 그 글이 전송된다. 대신 유저가 직접 꺼낼 수 있게 안내만 한다
+            // 안전망(15초): 읽기가 확인됐으면 되돌린다. 아직 실리가 입력창을 읽기 전이면 그대로 기다린다 — 지금 되돌리면 실리가 뒤늦게
+            // 진행할 때 그 글이 전송된다. 우리 generate() 가 끝나면(settled) 조용히 돌아온다. 알림은 띄우지 않는다(2026-10-23 유저 지시)
             const timer = setTimeout(() => {
                 if (!mine()) return;
-                if (!d.guard) { self.restoreDraftNow(); return; }
-                if (d.readSeen) return;   // 그룹 채팅: 멤버 생성이 이어지는 중 → 전부 끝나면 되돌아온다
-                toastr.info('입력창에 쓰던 글은 보관 중이며, 요청이 진행되거나 끝나면 자동으로 되돌아옵니다. 지금 꺼내려면 이 알림을 눌러 주십시오.', '', {
-                    timeOut: 15000, extendedTimeOut: 5000,
-                    onclick: () => { if (mine()) self.restoreDraftNow({ force: true }); },
-                });
+                if (!d.guard) self.restoreDraftNow();
             }, 15000);
             d.off.push(() => clearTimeout(timer));
 
@@ -537,7 +532,6 @@
                 } else if (current !== d.text) {
                     // 비워 둔 잠깐 사이에 유저가 새로 친 글이 있으면 초안을 버리지 않고 그 앞에 되돌린다 (초안 유실 방지, 2026-10-11)
                     $input.val(`${d.text}\n${current}`);
-                    toastr.info('입력 중이던 글 앞에 이전 초안을 되돌렸습니다.', '', { timeOut: 4000 });
                     debugLog('입력창 초안 병합 복원');
                 }
                 $input[0].dispatchEvent(new Event('input', { bubbles: true }));
@@ -757,34 +751,8 @@
             const isGroup = !!context.groupId;
             const WAIT_LIMIT_MS = 5 * 60 * 1000;   // 최대 5분 (너무 느리면 유저가 [중단]을 누름)
             const fmt = (sec) => sec >= 60 ? `${Math.floor(sec / 60)}분 ${sec % 60}초` : `${sec}초`;
-            // 지운 유저 메시지 본문(생성이 끝내 실패하면 입력창으로 되돌려 줄 것). 응답이 오면 폐기
-            let deletedUserText = '';
-            let lenAfterDelete = 0;
+            // 지운 메시지는 지운 것이다 — 입력창으로 되돌려 주지 않는다(2026-10-23 유저 지시: 입력창은 재생성·삭제와 무관)
             let unsettledGenerates = 0;   // 이 파이프라인이 부른 generate() 중 아직 끝나지 않은 수
-            const offerDeletedTextRestore = () => {
-                if (!deletedUserText) return;
-                const text = deletedUserText;
-                deletedUserText = '';
-                const c = getContext();
-                const cur = c?.chat || [];
-                const last = cur[cur.length - 1];
-                const gotReply = cur.length > lenAfterDelete && last && !last.is_user && String(last.mes || '').trim().length > 0;
-                if (gotReply) return;   // 새 응답이 붙었으면 유저 메시지는 "소비"된 것 — 되돌리지 않음
-                const $input = $('#send_textarea');
-                if (!$input.length) return;
-                const current = String($input.val() || '');
-                // 우리 요청이 아직 안 끝났으면(멈춘 서버가 뒤늦게 진행할 수 있음) 입력창에 바로 넣지 않는다 — 넣으면 그 글이 다시 전송될 수 있다
-                if (!current.trim() && unsettledGenerates === 0) {
-                    $input.val(text);
-                    $input[0].dispatchEvent(new Event('input', { bubbles: true }));
-                    toastr.info('지웠던 유저 메시지를 입력창에 되돌렸습니다.', '', { timeOut: 6000 });
-                } else {
-                    toastr.info('지웠던 유저 메시지가 있습니다. 이 알림을 누르면 입력창 끝에 붙입니다.', '', {
-                        timeOut: 15000, extendedTimeOut: 5000,
-                        onclick: () => { $input.val(`${String($input.val() || '')}\n${text}`); $input[0].dispatchEvent(new Event('input', { bubbles: true })); },
-                    });
-                }
-            };
 
             // 대기 중(남의 생성이 끝나길 기다리는 동안) 유저가 입력필드의 정지(■) 버튼을 누르면 "전부 멈춰라"로 본다 → 우리 예약도 취소.
             // (■ 는 남의 생성을 멈추고, 그 직후 우리가 지우고 요청하면 유저가 멈춘 자리에서 생성이 다시 시작되는 꼴이 된다, 2026-10-22)
@@ -866,10 +834,8 @@
                 let type = 'regenerate';
                 if (lastIsUser || (isGroup && lastMessage)) {
                     if (dead()) return false;
-                    if (lastIsUser) deletedUserText = String(lastMessage.mes || '');
                     const deleted = await this.deleteLastMessage({ confirm: false, silent: true });
-                    if (!deleted) { deletedUserText = ''; throw new Error('마지막 메시지 삭제 실패'); }
-                    lenAfterDelete = context.chat.length;
+                    if (!deleted) throw new Error('마지막 메시지 삭제 실패');
                     type = context.chat[context.chat.length - 1]?.is_user ? 'regenerate' : 'normal';
                 }
                 // 이 파이프라인이 지워도 되는 것은 ① 첫 시도의 그 한 개 ② 실패한 시도가 남긴 조각(그 시도 중에 새로 생긴 봇 메시지)뿐이다.
@@ -1114,16 +1080,14 @@
                     currentAttempt = attempt;
                     const result = await attemptOnce(type);
                     detachAfterData();
-                    if (result.cancelled) { offerDeletedTextRestore(); return false; }
+                    if (result.cancelled) return false;
                     if (result.stopped) {
                         releasePipeline(me);
                         toastr.info('생성이 중단되었습니다.', '', { timeOut: 1500 });
-                        offerDeletedTextRestore();   // 응답 없이 멈췄으면 지운 유저 메시지를 되돌릴 수 있게
                         return true;
                     }
                     if (result.ok) {
                         releasePipeline(me);
-                        deletedUserText = '';   // 응답을 받았으니 지운 유저 메시지는 소비됨
                         // 완료 토스트는 띄우지 않음 (유저 지시: 응답이 보이면 그걸로 충분)
                         return true;
                     }
@@ -1173,14 +1137,13 @@
                         const remainWindow = Math.max(0, Math.round((retryWindowMs - (Date.now() - retryStartedAt)) / 1000));
                         showStageToast(`요청 실패 — ${remain}초 후 재요청 (${attempt + 1}회째 시도 · 남은 시간 ${fmt(remainWindow)})${result.reason ? ` · ${result.reason}` : ''}`);
                         const r = await Promise.race([delay(1000).then(() => null), stoppedDuringWait]);
-                        if (dead()) { stoppedDuringWait.cancel(); offerDeletedTextRestore(); return false; }
+                        if (dead()) { stoppedDuringWait.cancel(); return false; }
                         if (r) { stopped = true; break; }
                     }
                     stoppedDuringWait.cancel();
                     if (stopped) {
                         releasePipeline(me);
                         toastr.info('재시도를 중단했습니다.', '', { timeOut: 1500 });
-                        offerDeletedTextRestore();
                         return true;
                     }
                     // 쉬는 사이 다른 생성(요약 같은 조용한 생성 등)이 시작됐으면: 실리의 바쁨 표시는 하나뿐이라 지금 풀면 그 생성의 표시까지 지워지고,
@@ -1196,11 +1159,10 @@
                             onTick: (sec) => { if (!dead()) showStageToast(`대기 중: ${this.describeBusyReason()} (${fmt(sec)})`, { abortLabel: '예약 취소' }); },
                         });
                         unwatchStopButton();
-                        if (dead()) { offerDeletedTextRestore(); return false; }
+                        if (dead()) return false;
                         if (stopPressed) {
                             releasePipeline(me);
                             toastr.info('정지 버튼이 눌려 재시도를 중단했습니다.', '', { timeOut: 2000 });
-                            offerDeletedTextRestore();
                             return true;
                         }
                     }
@@ -1221,7 +1183,7 @@
                     // 앞 시도의 generate() 가 아직 안 끝났으면(얼었던 탭·느린 서버) 끝날 때까지 기다린다 — 겹쳐 보내면 실리가 두 번 지운다
                     if (unsettledGenerates > 0) {
                         await waitUntil(() => unsettledGenerates === 0, { timeoutMs: 30000, intervalMs: 200, isCancelled: dead });
-                        if (dead()) { offerDeletedTextRestore(); return false; }
+                        if (dead()) return false;
                         if (unsettledGenerates > 0) throw new Error('앞 요청이 끝나지 않아 재요청을 취소했습니다.');
                     }
                 }
@@ -1234,7 +1196,6 @@
                     const reason = (error && error.message) ? error.message : '';
                     toastr.error(`재생성에 실패했습니다. ${reason}`.trim(), '', { timeOut: 8000 });
                 }
-                offerDeletedTextRestore();   // 끝내 응답을 못 받았으면 지운 유저 메시지를 입력창으로
                 return false;
             } finally {
                 // 어떤 경로로 끝나든 여기서 한 번 더 — 이 파이프라인이 건 것은 하나도 남기지 않는다
