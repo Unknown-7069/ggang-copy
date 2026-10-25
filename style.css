@@ -26,6 +26,79 @@
     cursor: pointer !important;
 }
 
+/* 좌하단·우하단 아이콘 줄바꿈용 칸 — 진짜 요소 대신 가상 요소 (2026-10-25, 조화 원칙).
+   테마의 `#leftSendForm > *` / `> div` 크기 규칙은 가상 요소에 닿지 않으므로 빈 줄이 생기지 않습니다.
+   어느 쪽(::after/::before)을 쓸지는 icons.js 가 테마가 비워 둔 쪽을 골라 data-copybot-break 에 적습니다.
+   우하단은 전송 버튼 상자(#rightSendForm)에 같은 방식으로 적용합니다. */
+#leftSendForm[data-copybot-break="after"]::after,
+#leftSendForm[data-copybot-break="before"]::before,
+#rightSendForm[data-copybot-break="after"]::after,
+#rightSendForm[data-copybot-break="before"]::before {
+    content: "";
+    /* 한 줄 폭보다 1px 크게 잡아 "이 줄엔 아무것도 더 못 들어오게" 한 뒤 줄 안에서 1px 줄어듭니다.
+       정확히 100% 이면 폭 0 인 오른쪽 맞춤용 빈 칸이 이 줄 끝에 붙어 버려 아이콘 줄로 못 내려갑니다(2026-10-26 폰 확인). */
+    flex: 0 1 calc(100% + 1px);
+    width: 0;
+    min-width: 0;
+    height: 0;
+    min-height: 0;
+    max-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    order: 2147483646;
+    pointer-events: none;
+}
+
+/* 우하단 아랫줄 오른쪽 맞춤용 빈 칸 — 아랫줄 맨 앞에서 남는 폭을 다 차지해 아이콘을 전송 버튼 아래(오른쪽 끝)로 밉니다.
+   테마가 `#rightSendForm > div { margin: 0 !important }` 를 줘도 가상 요소에는 닿지 않습니다(2026-10-26). */
+#rightSendForm[data-copybot-spacer="before"]::before {
+    content: "";
+    flex: 1 1 0;
+    width: 0;
+    height: 0;
+    min-width: 0;
+    min-height: 0;
+    max-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    order: 2147483647;
+    pointer-events: none;
+}
+
+/* 입력필드 아이콘 호환 (기타 탭, 기본 OFF, 2026-10-26) — 다른 확장이 입력창 옆에 끼운 아이콘을 전송 버튼과 같은 줄·크기·배색으로 맞춥니다.
+   값은 icons.js refreshCompatIcons 가 전송 버튼(#send_but)을 재서 그 요소의 CSS 변수로 적고, 표식이 없으면 이 규칙은 아무 데도 닿지 않습니다.
+   선택자는 실리 입력 줄 id 를 붙인 것(1-1-0, 테마의 `#nonQRFormItems > div` 1-0-1 보다 앞섬)과 속성 선택자 두 번(0-2-0, 다른 상자일 때)을 함께 쓰고 !important 는 쓰지 않습니다.
+   세로 줄은 icons.js 가 적용 직후 전송 버튼과 어긋난 만큼을 재서 translateY 로 옮깁니다(여백은 테마가 0 으로 고정하는 경우가 있어 쓰지 않음).
+   transition 을 끄는 것은 그 확장의 전환(예: 200ms) 도중 값을 재지 않기 위해서입니다. */
+#nonQRFormItems > [data-copybot-compat-icon="1"],
+[data-copybot-compat-icon="1"][data-copybot-compat-icon] {
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--copybot-compat-w);
+    height: var(--copybot-compat-h);
+    min-width: var(--copybot-compat-w);
+    min-height: var(--copybot-compat-h);
+    max-width: none;
+    max-height: none;
+    margin: var(--copybot-compat-m);
+    transform: translateY(var(--copybot-compat-dy, 0px));
+    transition: none;
+    padding: var(--copybot-compat-pad);
+    font-size: var(--copybot-compat-fs);
+    color: var(--copybot-compat-color);
+    background-color: var(--copybot-compat-bg);
+    border: var(--copybot-compat-border);
+    border-radius: var(--copybot-compat-radius);
+    opacity: var(--copybot-compat-opacity);
+    filter: var(--copybot-compat-filter);
+}
+
 /* 설명 섹션 */
 .copybot_description_section {
     margin: 6px 0;

@@ -425,16 +425,20 @@
                                         <label for="copybot_ghostwrite_position_left" class="copybot_settings_sub_label">좌측</label>
                                     </div>
                                     <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
-                                        <input type="radio" id="copybot_ghostwrite_position_bottom_right" name="copybot_ghostwrite_position" value="bottom_right" class="copybot_radio">
-                                        <label for="copybot_ghostwrite_position_bottom_right" class="copybot_settings_sub_label">우상단</label>
+                                        <input type="radio" id="copybot_ghostwrite_position_right" name="copybot_ghostwrite_position" value="right" class="copybot_radio" checked>
+                                        <label for="copybot_ghostwrite_position_right" class="copybot_settings_sub_label">우측</label>
                                     </div>
                                     <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
                                         <input type="radio" id="copybot_ghostwrite_position_bottom_left" name="copybot_ghostwrite_position" value="bottom_left" class="copybot_radio">
                                         <label for="copybot_ghostwrite_position_bottom_left" class="copybot_settings_sub_label">좌하단</label>
                                     </div>
                                     <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
-                                        <input type="radio" id="copybot_ghostwrite_position_right" name="copybot_ghostwrite_position" value="right" class="copybot_radio" checked>
-                                        <label for="copybot_ghostwrite_position_right" class="copybot_settings_sub_label">우측</label>
+                                        <input type="radio" id="copybot_ghostwrite_position_right_bottom" name="copybot_ghostwrite_position" value="right_bottom" class="copybot_radio">
+                                        <label for="copybot_ghostwrite_position_right_bottom" class="copybot_settings_sub_label">우하단</label>
+                                    </div>
+                                    <div class="copybot_settings_sub_item" style="flex-basis: 45%;">
+                                        <input type="radio" id="copybot_ghostwrite_position_bottom_right" name="copybot_ghostwrite_position" value="bottom_right" class="copybot_radio">
+                                        <label for="copybot_ghostwrite_position_bottom_right" class="copybot_settings_sub_label">우상단</label>
                                     </div>
                                 </div>
                             </div>
@@ -549,6 +553,7 @@
                                         <option value="left">좌측</option>
                                         <option value="right">우측</option>
                                         <option value="bottom_left" selected>좌하단</option>
+                                        <option value="right_bottom">우하단</option>
                                         <option value="bottom_right">우상단</option>
                                     </select>
                                 </div>
@@ -581,6 +586,7 @@
                                         <option value="left">좌측</option>
                                         <option value="right">우측</option>
                                         <option value="bottom_left" selected>좌하단</option>
+                                        <option value="right_bottom">우하단</option>
                                         <option value="bottom_right">우상단</option>
                                     </select>
                                 </div>
@@ -613,6 +619,7 @@
                                         <option value="left">좌측</option>
                                         <option value="right">우측</option>
                                         <option value="bottom_left" selected>좌하단</option>
+                                        <option value="right_bottom">우하단</option>
                                         <option value="bottom_right">우상단</option>
                                     </select>
                                 </div>
@@ -737,6 +744,7 @@
                                                 <option value="left">좌측</option>
                                                 <option value="right">우측</option>
                                                 <option value="bottom_left" selected>좌하단</option>
+                                                <option value="right_bottom">우하단</option>
                                                 <option value="bottom_right">우상단</option>
                                             </select>
                                         </div>
@@ -855,7 +863,20 @@
                     
                     <!-- 기타 설정창 -->
                     <div id="copybot_misc_panel" class="copybot_settings_panel" style="display: none;">
-						
+
+                        <!-- 입력필드 아이콘 호환 (2026-10-26 유저 결정, 기본 OFF) — 다른 확장이 입력창 옆에 끼운 아이콘을 전송 버튼과 같은 줄·크기·배색으로 -->
+                        <div class="copybot_settings_item">
+                            <div class="copybot_settings_main">
+                                <span class="copybot_settings_label">입력필드 아이콘 호환</span>
+                                <button id="copybot_compat_input_icons_toggle" class="copybot_toggle_button" data-enabled="false">
+                                    OFF
+                                </button>
+                            </div>
+                            <div class="copybot_description" style="margin-top: 10px; font-size:12px; color: #666;">
+                                입력필드에서 테마와 어긋난 다른 확장 아이콘의 위치·크기·배색을 전송 버튼에 맞춰 정렬합니다.
+                            </div>
+                        </div>
+
                         <div class="copybot_settings_item">
                             <div class="copybot_settings_main">
                                 <span class="copybot_settings_label">고화질 프로필 사진</span>

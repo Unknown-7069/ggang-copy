@@ -140,28 +140,43 @@
         const menu = document.getElementById(isWand ? 'extensionsMenu' : 'options');
         const opener = document.getElementById(isWand ? 'extensionsMenuButton' : 'options_button');
         let openedByUs = false;
-        if (menu && opener && !$(menu).is(':visible')) {
-            // 실제 탭처럼 버튼에 포커스를 둔다 — 실리의 "메뉴 밖을 눌렀으면 닫기" 판정이 버튼의 :focus/:hover 를 보므로, 포커스 없이 누르면 열리자마자 닫힘
-            try { opener.focus({ preventScroll: true }); } catch (e) { /* 무시 */ }
-            // 실리 기본 메뉴 버튼 (유저가 누른 것과 동일). 어떤 확장은 메뉴를 직접 숨겨 실리의 열림/닫힘 기억이 어긋나 있어
-            // 한 번 눌러도 안 열릴 수 있다 → 유저가 하듯 한 번 더 누른다 (둘 다 실리 토글 경로라 상태가 다시 맞춰짐)
-            for (let attempt = 0; attempt < 2 && !$(menu).is(':visible'); attempt++) {
-                $(opener).trigger('click');
-                await waitFor(() => $(menu).is(':visible') && found.el.getBoundingClientRect().height > 0, 350);
+        // 우리가 여는 동안만 메뉴를 눈에 안 보이게 가린다(visibility — 자리·크기는 그대로라 항목 좌표·팝업 위치는 실제 메뉴와 같고, jQuery :visible 판정도 그대로).
+        // 유저가 누른 건 "메모장 열기"지 "마법봉 메뉴 보기"가 아니다(2026-10-25 유저 지적: 메뉴가 잠깐 떴다 사라짐). 끝나면 어떤 경로든 되돌린다(finally).
+        const prevVisibility = menu ? menu.style.visibility : '';
+        let masked = false;
+        try {
+            if (menu && opener && !$(menu).is(':visible')) {
+                try { menu.style.visibility = 'hidden'; masked = true; } catch (e) { /* 무시 */ }
+                // 실제 탭처럼 버튼에 포커스를 둔다 — 실리의 "메뉴 밖을 눌렀으면 닫기" 판정이 버튼의 :focus/:hover 를 보므로, 포커스 없이 누르면 열리자마자 닫힘
+                try { opener.focus({ preventScroll: true }); } catch (e) { /* 무시 */ }
+                // 실리 기본 메뉴 버튼 (유저가 누른 것과 동일). 어떤 확장은 메뉴를 직접 숨겨 실리의 열림/닫힘 기억이 어긋나 있어
+                // 한 번 눌러도 안 열릴 수 있다 → 유저가 하듯 한 번 더 누른다 (둘 다 실리 토글 경로라 상태가 다시 맞춰짐)
+                for (let attempt = 0; attempt < 2 && !$(menu).is(':visible'); attempt++) {
+                    $(opener).trigger('click');
+                    await waitFor(() => $(menu).is(':visible') && found.el.getBoundingClientRect().height > 0, 350);
+                }
+                openedByUs = $(menu).is(':visible');
+                // 항목을 누르기 전에 버튼 포커스를 뗀다 → 항목 클릭이 문서까지 올라갈 때 실리의 "메뉴 밖 클릭" 판정이 평소처럼 메뉴를 닫아
+                // 실리 내부의 열림/닫힘 기억이 어긋나지 않는다 (어떤 확장은 메뉴를 직접 숨겨 어긋나게 만듦 → 다음 ≡ 탭이 두 번 필요해지는 현상 방지)
+                try { if (document.activeElement === opener) opener.blur(); } catch (e) { /* 무시 */ }
             }
-            openedByUs = $(menu).is(':visible');
-            // 항목을 누르기 전에 버튼 포커스를 뗀다 → 항목 클릭이 문서까지 올라갈 때 실리의 "메뉴 밖 클릭" 판정이 평소처럼 메뉴를 닫아
-            // 실리 내부의 열림/닫힘 기억이 어긋나지 않는다 (어떤 확장은 메뉴를 직접 숨겨 어긋나게 만듦 → 다음 ≡ 탭이 두 번 필요해지는 현상 방지)
-            try { if (document.activeElement === opener) opener.blur(); } catch (e) { /* 무시 */ }
+            tapElement(found.el);
+            if (openedByUs) await closeMenuWeOpened(menu, opener);
+        } finally {
+            if (masked) { try { menu.style.visibility = prevVisibility; } catch (e) { /* 무시 */ } }
         }
-        tapElement(found.el);
-        if (openedByUs) {
-            await wait(80);
-            if ($(menu).is(':visible')) {
-                $(opener).trigger('click');                               // 아직 열려 있으면 실리 버튼으로 닫아 실리 내부 상태와 어긋나지 않게
-                await waitFor(() => !$(menu).is(':visible'), 600);
-                if ($(menu).is(':visible')) $(menu).stop(true, true).hide();
-            }
+    }
+    // 우리가 연 메뉴 닫기. 실리는 항목 클릭이 문서까지 올라오면 메뉴를 fadeOut(기본 125ms)으로 닫고 자기 기억을 '닫힘'으로 바꾼다. 닫히는 동안에도 :visible 은 참이라
+    // 그 사이에 "아직 열려 있네" 하고 버튼을 다시 누르면 실리는 '닫힘'이라 fadeIn 으로 다시 연다 → 그 확장의 팝업 위에 메뉴가 사라졌다 다시 뜨는
+    // 엎치락뒤치락(2026-10-25 원고지 테마에서 발견. "움직임 줄이기"가 꺼진 테마에서만 보이고, 켜진 테마는 애니메이션 0ms 라 그 전에 이미 닫혀 있었음).
+    // → 실리의 열림/닫힘 애니메이션이 끝나 상태가 확정된 뒤에만 판단한다(숨겨졌거나, 보이는데 움직이지 않을 때).
+    async function closeMenuWeOpened(menu, opener) {
+        await waitFor(() => !$(menu).is(':visible') || !$(menu).is(':animated'), 1500, 25);
+        if ($(menu).is(':visible')) {
+            // 애니메이션이 끝났는데도 열려 있다 = 그 확장이 클릭 전파를 막아 실리가 닫지 않았다 → 실리 기억도 '열림'이므로 실리 버튼으로 닫는다
+            $(opener).trigger('click');
+            await waitFor(() => !$(menu).is(':visible'), 1500, 25);
+            if ($(menu).is(':visible')) $(menu).stop(true, true).hide();
         }
     }
 
@@ -1147,6 +1162,7 @@
         setDebugMode: (v) => { isDebugMode = !!v; },
         // 테스트 노출용 (읽기 전용 스캔)
         _scanAllZones: scanAllZones, _matchLevel: matchLevel, _classifyEntries: classifyEntries, _baseKey: baseKey, _resolveEntry: resolveEntry, _listEnabledExtensions: listEnabledExtensions, _quoteArg: quoteArg,
+        _tapMenuItem: tapMenuItem,
     };
 
     if (window.copybot_debug_mode) {

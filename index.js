@@ -1001,7 +1001,7 @@
     // 테마(body class) 변경 감시 — 입력창 아이콘·임시 대필칸이 실제로 있을 때만 관찰 (없으면 옵저버 해제)
     let themeObserver = null;
     window.copybot_refreshThemeWatch = function() {
-        const needed = !!document.querySelector('.copybot_input_field_icon, #copybot_temp_prompt');
+        const needed = !!document.querySelector('.copybot_input_field_icon, #copybot_temp_prompt, [data-copybot-compat-icon]');   // 호환 표식도 테마 색을 따라가야 하므로 포함
         if (needed && !themeObserver && document.body) {
             themeObserver = new MutationObserver((mutations) => {
                 for (const mutation of mutations) {

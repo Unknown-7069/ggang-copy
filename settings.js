@@ -289,6 +289,7 @@
 						hqProfile: $('#copybot_hq_profile_toggle').attr('data-enabled') === 'true',
 						hqProfileList: $('#copybot_hq_profile_list').is(':checked'),   // 봇 목록에도 적용 (기본 OFF)
 						removeResize: $('#copybot_remove_resize_toggle').attr('data-enabled') === 'true',
+						compatInputIcons: $('#copybot_compat_input_icons_toggle').attr('data-enabled') === 'true',   // 입력필드 아이콘 호환 (기본 OFF, 2026-10-26)
 						debugMode: $('#copybot_debug_mode_toggle').attr('data-enabled') === 'true',
 						hidePlaceholder: window.CopyBotSettings.getPlaceholderMode() === 'hide',
 						placeholderMode: window.CopyBotSettings.getPlaceholderMode(),
@@ -733,6 +734,9 @@
                     $('#copybot_hq_profile_list').prop('checked', hqProfileListEnabled);
                     $('#copybot_hq_profile_options').toggle(hqProfileEnabled);
                     $('#copybot_remove_resize_toggle').attr('data-enabled', removeResizeEnabled).text(removeResizeEnabled ? 'ON' : 'OFF');
+                    // 입력필드 아이콘 호환(2026-10-26, 기본 OFF). 적용 자체는 아이콘 갱신(scheduleIconUpdates → updateInputFieldIcons)이 맡는다
+                    const compatInputIconsEnabled = settings.misc.compatInputIcons === true;
+                    $('#copybot_compat_input_icons_toggle').attr('data-enabled', compatInputIconsEnabled).text(compatInputIconsEnabled ? 'ON' : 'OFF');
                     $('#copybot_confirm_delete_toggle').attr('data-enabled', confirmDeleteEnabled).text(confirmDeleteEnabled ? 'ON' : 'OFF');
 
                     // 입력창 안내문 모드 (구버전 hidePlaceholder → 'hide' 로 이행)
