@@ -286,6 +286,8 @@
 						}
 					},
 					misc: {
+						personaSort: $('#copybot_persona_sort_toggle').attr('data-enabled') === 'true',
+						personaSortMode: window.CopyBotPersonaSort?.getMode() || '',
 						hqProfile: $('#copybot_hq_profile_toggle').attr('data-enabled') === 'true',
 						hqProfileList: $('#copybot_hq_profile_list').is(':checked'),   // 봇 목록에도 적용 (기본 OFF)
 						removeResize: $('#copybot_remove_resize_toggle').attr('data-enabled') === 'true',
@@ -719,6 +721,9 @@
                 }, 150);
                 
                 // 기타 설정 로드
+                const personaSortEnabled = settings.misc?.personaSort === true;
+                $('#copybot_persona_sort_toggle').attr('data-enabled', personaSortEnabled).text(personaSortEnabled ? 'ON' : 'OFF');
+                window.CopyBotPersonaSort?.configure(personaSortEnabled, settings.misc?.personaSortMode || '');
                 if (settings.misc) {
                     // 각 설정값이 명시적으로 true일 때만 ON으로 설정합니다. (기본값 OFF)
                     const hqProfileEnabled = settings.misc.hqProfile === true;

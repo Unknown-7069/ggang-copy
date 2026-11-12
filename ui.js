@@ -1302,6 +1302,7 @@
                         'copybot_remove_resize_toggle': () => newState ? (callbacks.removeResizeHandle && callbacks.removeResizeHandle()) : (callbacks.restoreResizeHandle && callbacks.restoreResizeHandle()),
                         // 입력필드 아이콘 호환: 켜면 아래의 공통 아이콘 갱신(safeUpdateInputFieldIcons)이 적용하고, 끄면 표식·변수를 바로 뗀다
                         'copybot_compat_input_icons_toggle': () => { if (!newState) window.CopyBotIcons?.clearCompatIcons?.(); },
+                        'copybot_persona_sort_toggle': () => window.CopyBotPersonaSort?.configure(newState),
                         'copybot_hide_placeholder_toggle': () => newState ? (callbacks.hidePlaceholder && callbacks.hidePlaceholder()) : (callbacks.restorePlaceholder && callbacks.restorePlaceholder()),
                         'copybot_confirm_delete_toggle': () => { /* 설정 저장만 수행하면 되므로 추가 동작 없음 */ },
                         'copybot_debug_mode_toggle': () => {

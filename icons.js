@@ -8,6 +8,7 @@
 	let isDebugMode = false;
 	let callbacks = null;
 
+    window.CopyBotIcons?.disposeExecutionWatch?.(); // 핫리로드 때 이전 구독 해제
     // 전역 네임스페이스 생성
     window.CopyBotIcons = {
         // 모듈 초기화 함수
@@ -131,24 +132,61 @@
             try { return $('#copybot_compat_input_icons_toggle').attr('data-enabled') === 'true'; } catch (e) { return false; }
         },
         clearCompatIcons: function() {
+            ++compatSeq;
+            compatPending = false;
+            compatIdleLayout = null;
             try {
-                document.querySelectorAll('[data-copybot-compat-icon]').forEach(el => unmarkCompat(el));
+                const targets=[...document.querySelectorAll('[data-copybot-compat-icon]')];
+                targets.forEach(el => unmarkCompat(el));
+                // 호환을 끌 때 상대 테마의 복귀 애니메이션은 그대로 둔다.
+                // 그 전환이 끝난 뒤 우리 별도 묶음의 위치만 한 번 다시 확인한다.
+                if (targets.length && this.anyIconConfigured()) {
+                    clearTimeout(compatReleaseTimer);
+                    const settleMs=Math.max(0,...targets.map(transitionMs));
+                    compatReleaseTimer=setTimeout(()=>{
+                        compatReleaseTimer=0;
+                        if (!this.isCompatIconsEnabled() && this.anyIconConfigured()) scheduleLayoutCheck();
+                    },settleMs+50);
+                }
             } catch (e) { /* 무시 */ }
         },
         refreshCompatIcons: function() {
             try {
+                compatPending = false;
                 if (!this.isCompatIconsEnabled()) { this.clearCompatIcons(); return; }
+                clearTimeout(compatReleaseTimer);compatReleaseTimer=0;
+                if (!usableInputViewport()) { ++compatSeq; deferredLayoutUpdate = true; return; }
                 const textarea = document.querySelector('#send_textarea');
-                const ref = document.querySelector('#send_but');
+                const idleReference = document.getElementById('send_but');
+                const idleRect = idleReference?.getBoundingClientRect();
+                const idleStillAligned = executionState() === '00' && idleRect?.width > 0 &&
+                    compatIdleLayout?.appearance === compatReferenceAppearance(idleReference) &&
+                    compatIdleLayout.targets.every(el=>{const r=el.getBoundingClientRect();return Math.abs(r.top-idleRect.top)<=1.5&&Math.abs(r.width-idleRect.width)<=1.5&&Math.abs(r.height-idleRect.height)<=1.5});
+                // 이미 맞춰 둔 평상시 배치는 실행 상태만 바뀌었다고 다시 맞추지 않는다.
+                // 작은 생성 정지 버튼을 새 기준으로 삼으면 깃털 등이 작아지고 옆으로 밀린다.
+                if ((executionState() !== '00' || idleStillAligned) && compatIdleLayout?.row === textarea?.parentElement &&
+                    compatIdleLayout.signature === compatLayoutSignature() &&
+                    compatIdleLayout.targets.every(el => el.isConnected && el.dataset.copybotCompatIcon === '1')) {
+                    ++compatSeq; // 실행 직전에 예약된 재측정도 현재 배치를 덮지 않게 한다.
+                    scheduleLayoutCheck();
+                    return;
+                }
+                // 평상시 기준이 없는 경우에만 보이는 제어 버튼으로 초기 정렬한다.
+                const dockSend=scriptDock&&document.getElementById('send_but');
+                const dockReference=scriptDock?.placeholder||(dockSend?.getBoundingClientRect().width>0?dockSend:null);
+                const ref = dockReference || ['send_but','mes_stop','stscript_pause','stscript_continue','stscript_stop']
+                    .map(id => document.getElementById(id)).find(el => el && shown(el));
                 const row = textarea?.parentElement;
-                if (!row || !ref || typeof getComputedStyle !== 'function') return;
+                if (!row || typeof getComputedStyle !== 'function') return;
+                if (!ref) { this.clearCompatIcons(); return; }
                 const refRect = ref.getBoundingClientRect();
-                if (refRect.width === 0 || refRect.height === 0) return;   // 전송 버튼이 숨겨진 때(생성 중 ■ 로 바뀜 등): 지금 값은 못 믿으니 그대로 둔다
+                if (refRect.width === 0 || refRect.height === 0) { this.clearCompatIcons(); return; } // 기준을 잃으면 우리 보정을 해제한다.
                 const targets = [];
                 const rowRect = row.getBoundingClientRect();
                 Array.from(row.children).forEach(el => {
                     if (el === textarea || el.contains(ref)) return;                              // 입력창·전송 버튼(상자)
                     if (el.id === 'leftSendForm' || el.id === 'rightSendForm') return;           // 실리 버튼 상자
+                    if (el.matches('.stscript_btn,#send_but,#mes_stop,#mes_impersonate,#mes_continue')) return;
                     if (/copybot/i.test(`${el.id || ''} ${typeof el.className === 'string' ? el.className : ''}`)) return;   // 우리 요소
                     if (/^(textarea|input|select|script|style|template)$/i.test(el.tagName)) return;
                     const cs = getComputedStyle(el);
@@ -162,22 +200,30 @@
                 });
                 document.querySelectorAll('[data-copybot-compat-icon]').forEach(el => { if (!targets.includes(el)) unmarkCompat(el); });   // 대상이 아니게 된 것 정리
                 if (!targets.length) return;
+                compatPending = true;
                 const rs = getComputedStyle(ref);
                 // 반올림 금지: 전송 버튼이 28.5px 같은 소수 크기면 올림한 만큼 입력 줄이 1px 자란다(2026-10-26 폰 확인)
                 const px = (n) => `${Math.round(n * 1000) / 1000}px`;
                 const border = (rs.borderTopStyle && rs.borderTopStyle !== 'none') ? `${rs.borderTopWidth} ${rs.borderTopStyle} ${rs.borderTopColor}` : '0 none transparent';
+                let referenceMargin = rs.margin || '0px';
+                try {
+                    // flex의 auto 여백은 현재 남은 공간만큼 px로 읽힌다. 그 숫자를
+                    // 다른 부모의 아이콘에 고정하면 다음 정렬마다 줄 높이가 달라진다.
+                    const typed = ref.computedStyleMap?.();
+                    if (typed) referenceMargin = ['top','right','bottom','left'].map(side =>
+                        String(typed.get(`margin-${side}`)) === 'auto' ? 'auto' : rs.getPropertyValue(`margin-${side}`)).join(' ');
+                } catch (e) { /* Typed OM 미지원이면 기존 계산값을 유지한다. */ }
                 const vars = {
                     '--copybot-compat-w': px(refRect.width),
                     '--copybot-compat-h': px(refRect.height),
-                    '--copybot-compat-m': rs.margin || '0px',
-                    '--copybot-compat-dy': '0px',
+                    '--copybot-compat-m': referenceMargin,
                     '--copybot-compat-pad': rs.padding || '0px',
                     '--copybot-compat-fs': rs.fontSize || 'inherit',
                     '--copybot-compat-color': rs.color || 'inherit',
                     '--copybot-compat-bg': rs.backgroundColor || 'transparent',
                     '--copybot-compat-border': border,
                     '--copybot-compat-radius': rs.borderRadius || '0',
-                    '--copybot-compat-opacity': rs.opacity || '1',
+                    '--copybot-compat-opacity': (scriptDock&&ref===dockSend?scriptReferenceSizes.get(ref)?.opacity:null) || rs.opacity || '1',
                     '--copybot-compat-filter': rs.filter || 'none'
                 };
                 targets.forEach(el => {
@@ -193,9 +239,10 @@
                 const settleMs = Math.max(0, ...targets.map(el => transitionMs(el)));
                 const later = (fn) => { if (settleMs > 0) setTimeout(() => { if (seq === compatSeq) fn(); }, settleMs + 50); else fn(); };
                 const finishCheck = () => {
+                    if (!usableInputViewport()) { compatPending = false; deferredLayoutUpdate = true; return; }
                     // 1회 자가 검사: 전송 버튼과 같은 줄이 됐는지. 못 버티면(테마가 transform 까지 고정하는 등) 그 요소는 원래대로 둔다(물러남).
                     // 입력 줄 높이는 보지 않는다 — translateY 는 배치에 영향이 없고, 그 사이 유저가 글을 쳐서 입력창이 커진 것을 우리 탓으로 오판했었다(2026-10-26).
-                    if (!ref.isConnected || !row.isConnected) return;
+                    if (!ref.isConnected || !row.isConnected) { compatPending = false; return; }
                     const refTop2 = ref.getBoundingClientRect().top;
                     let kept = 0;
                     targets.forEach(el => {
@@ -204,21 +251,30 @@
                         if (off > 1.5) { debugLog('입력필드 아이콘 호환: 자가 검사 실패 → 그 요소는 원래대로', el.className, { off }); unmarkCompat(el); }
                         else kept++;
                     });
+                    compatPending = false;
+                    if (executionState() === '00') compatIdleLayout = kept ? {
+                        row, signature: compatLayoutSignature(), appearance: compatReferenceAppearance(ref),
+                        targets: targets.filter(el => el.isConnected && el.dataset.copybotCompatIcon === '1')
+                    } : null;
+                    scheduleLayoutCheck();
                     if (!kept) return;
                     window.copybot_refreshThemeWatch?.();   // 표식이 생겼으니 테마(body class) 변경 때 다시 재도록
                     debugLog('입력필드 아이콘 호환 적용', kept, vars, settleMs ? `전환 ${settleMs}ms 대기` : '');
                 };
                 const measureShift = () => {
-                    if (!ref.isConnected) return;
+                    if (!usableInputViewport()) { compatPending = false; deferredLayoutUpdate = true; return; }
+                    if (!ref.isConnected) { compatPending = false; return; }
                     const refTop = ref.getBoundingClientRect().top;
                     targets.forEach(el => {
                         if (!el.isConnected || el.dataset.copybotCompatIcon !== '1') return;
-                        el.style.setProperty('--copybot-compat-dy', px(refTop - el.getBoundingClientRect().top));
+                        const previousShift = parseFloat(el.style.getPropertyValue('--copybot-compat-dy')) || 0;
+                        el.style.setProperty('--copybot-compat-dy', px(previousShift + refTop - el.getBoundingClientRect().top));
                     });
                     later(finishCheck);
                 };
                 later(measureShift);
             } catch (error) {
+                compatPending = false;
                 debugLog('입력필드 아이콘 호환 적용 실패 — 그대로 둠', error);
             }
         },
@@ -229,13 +285,34 @@
 				debugLog('아이콘 업데이트 시작');
 
         // 미사용 시 무영향: 보여줄 아이콘도 없고 이전에 붙인 아이콘도 없으면 실리 DOM·스타일을 전혀 건드리지 않음
-        const OURS = '.copybot_input_field_icon, .copybot_independent_container, .copybot_bl_break, .copybot_rb_spacer';
+        const OURS = '.copybot_input_field_icon, .copybot_independent_container, .copybot_overflow_container, .copybot_bl_break, .copybot_rb_spacer';
         const hadIcons = document.querySelector(`${OURS}, [data-copybot-pos="1"], [data-copybot-layout="1"], [data-copybot-break], [data-copybot-compat-icon]`) !== null;
         if (!hadIcons && !this.anyIconConfigured()) {
+            this.disposeExecutionWatch();
             window.copybot_refreshThemeWatch?.();
             return;
         }
+        // Android가 화면 전환 중 1×1을 보고할 때 정상 배치를 실패로 판정하지 않는다.
+        // 기능 OFF의 원복은 화면 크기와 무관하게 진행한다.
+        if (this.anyIconConfigured() && !usableInputViewport()) {
+            this.refreshExecutionWatch();
+            deferredLayoutUpdate = true;
+            return;
+        }
+        deferredLayoutUpdate = false;
 
+        const renderSignature = inputRenderSignature();
+        if (executionState() !== '00' && renderSignature && renderedInput?.signature === renderSignature &&
+            renderedInput.host === document.querySelector('#send_form') && renderedInput.icons.length &&
+            renderedInput.icons.every(el=>el.isConnected) &&
+            renderedInput.icons.length === document.querySelectorAll('.copybot_input_field_icon').length) {
+            // 실행 상태만 바뀐 중복 갱신은 정상 아이콘을 없앴다 다시 만들지 않는다.
+            // 설정·테마·크기가 실제 바뀐 갱신은 아래의 정규 재구성을 그대로 수행한다.
+            this.refreshExecutionWatch(); this.refreshCompatIcons(); this.verifyInputLayout();
+            return;
+        }
+
+        restoreExecutionWidths();
         // 기존 아이콘들 제거 (좌하단 줄바꿈 상자 포함)
         document.querySelectorAll(OURS).forEach(el => el.remove());
 
@@ -270,6 +347,9 @@
             debugLog('send_but 요소를 찾을 수 없어 아이콘 업데이트 중단');
             return;
         }
+
+        const inputRow = textarea?.closest('#nonQRFormItems');
+        inputBaseline = inputRow ? {row: inputRow, height: inputRow.getBoundingClientRect().height} : null;
 
         // 위치 값: left(실리 왼쪽 버튼 옆) / right(전송 버튼 앞) / bottom_left(왼쪽 상자 아랫줄) / right_bottom(전송 버튼 상자 아랫줄, 2026-10-25 추가)
         // / bottom_right(= 설정의 "우상단": 입력창 위에 떠 있는 상자. 이름은 예전 값이라 저장본 호환 때문에 그대로 둔다)
@@ -416,6 +496,7 @@
             if (iconsToAdd.length === 0) continue;
             // 유저 우선순위대로 정렬 (DOM 삽입 순서 = 표시 순서)
             iconsToAdd.sort((a, b) => Number(a.dataset.cbPriority || 0) - Number(b.dataset.cbPriority || 0));
+            iconsToAdd.forEach(icon => { icon.dataset.copybotInputPosition = position; });
 
             switch(position) {
                 case 'bottom_left':
@@ -435,7 +516,10 @@
                             // 테마가 원래부터 상자를 넘치게 그리는 경우(Azure 등: 36px 버튼을 33px 상자에)가 있어, 자가 검사의 "잘림"은 이 기준선보다 더 넘칠 때만 센다
                             form.dataset.copybotOverflow = `${Math.max(0, form.scrollWidth - form.clientWidth)}x${Math.max(0, form.scrollHeight - form.clientHeight)}`;
                             // 상자의 폭은 아이콘을 넣기 "전" 폭으로 묶어 둔다 → 아이콘이 많아도 상자가 넓어져 입력창을 밀지 않고 아랫줄에서 접힘 (폰에서 검증된 예전 겉모습 유지)
-                            const widthBefore = form.getBoundingClientRect().width;
+                            // 전송 버튼이 작은 정지 버튼으로 바뀐 동안에도 우리 줄의 기준 폭은 유지한다.
+                            // 테마가 명시한 전송 버튼 폭을 읽을 수 없으면 아래 실행 시 폭 양보 경로를 쓴다.
+                            const replacementDelta = generationReplacementDelta(form, referenceIcon);
+                            const widthBefore = form.getBoundingClientRect().width + (replacementDelta || 0);
                             if (widthBefore > 0) {
                                 form.dataset.copybotMaxWidth = form.style.maxWidth || '';
                                 form.style.maxWidth = `${Math.ceil(widthBefore)}px`;
@@ -516,15 +600,17 @@
                             textareaParent.style.position = 'relative';
                             textareaParent.dataset.copybotPos = '1';
                         }
-                        independentContainer.style.cssText = `position:absolute!important;top:0!important;right:${minimalOffset}px!important;transform:translateY(calc(-100% - 4px))!important;display:flex!important;gap:6px!important;align-items:center!important;background:var(--SmartThemeBlurTintColor, rgba(40,40,40,.85))!important;border-radius:6px!important;padding:4px 8px!important;border:1px solid var(--SmartThemeBorderColor, rgba(128,128,128,.4))!important;box-shadow:0 2px 8px rgba(0,0,0,0.15)!important;z-index:1000!important;`;
+                        independentContainer.style.cssText = `position:absolute;top:0;right:${minimalOffset}px;transform:translateY(calc(-100% - 4px));display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--SmartThemeBlurTintColor, rgba(40,40,40,.85));border-radius:6px;padding:4px 8px;border:1px solid var(--SmartThemeBorderColor, rgba(128,128,128,.4));box-shadow:0 2px 8px rgba(0,0,0,0.15);z-index:1000;box-sizing:border-box;max-width:calc(100vw - 16px);`;
                         textareaParent.appendChild(independentContainer);
                     }
                     break;
             }
         }
         window.copybot_refreshThemeWatch?.();
+        this.refreshExecutionWatch();
+        renderedInput = {signature:renderSignature,host:document.querySelector('#send_form'),icons:[...document.querySelectorAll('.copybot_input_field_icon')]};
         // 입력필드 아이콘 호환: 우리 줄이 다 잡힌 다음 프레임에 전송 버튼을 잰다(아랫줄 자가 검사 rAF 가 먼저 등록돼 있어 그 결과까지 반영된 뒤).
-        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => this.refreshCompatIcons());
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => { this.refreshCompatIcons(); this.verifyInputLayout(); });
         else this.refreshCompatIcons();
         debugLog('아이콘 업데이트 완료');
     } catch (error) {
@@ -538,6 +624,7 @@
         // leftSendForm 인자 = 검사할 상자(좌하단이면 #leftSendForm, 우하단이면 전송 버튼 상자)
         verifyBottomRowLayout: function(leftSendForm, referenceIcon) {
             try {
+                if (!usableInputViewport()) return;
                 if (!leftSendForm?.isConnected || leftSendForm.dataset.copybotLayout !== '1') return;
                 // 아랫줄 아이콘만 본다(order 가 아랫줄 값인 것). 같은 상자에 '좌측'/'우측'으로 들어간 우리 아이콘은 실리 버튼과 같은 줄이라 검사 대상이 아니다
                 // (2026-10-25 폰 확인: 우측 아이콘까지 세어 "줄바꿈 안 됨"으로 오판 → 멀쩡한 우하단이 옆줄로 물러났음)
@@ -545,11 +632,43 @@
                 if (!icons.length) return;
                 const box = leftSendForm.getBoundingClientRect();
                 if (box.width === 0 && box.height === 0) return;   // 상자 자체가 안 그려진 상태(탭 숨김 등): 판단 보류
+                // 폭 0의 오른쪽 정렬 칸에도 flex gap은 붙는다. 테마 간격 때문에
+                // 한 줄에 들어갈 버튼이 갈라지면 우리 빈 칸만 포기한다.
+                // 테마의 gap/버튼 크기는 그대로 두고, 실제 줄 수가 줄어들 때만 유지한다.
+                const spacerSide=leftSendForm.dataset.copybotSpacer;
+                const spacer=leftSendForm.querySelector('.copybot_rb_spacer');
+                const layoutStyle=getComputedStyle(leftSendForm);
+                if ((spacerSide || spacer) && layoutStyle.display.includes('flex') &&
+                    layoutStyle.flexDirection==='row' && parseFloat(layoutStyle.columnGap)>0) {
+                    const rowCount=()=>{
+                        const rows=[];
+                        icons.map(el=>el.getBoundingClientRect()).filter(r=>r.width>0&&r.height>0)
+                            .sort((a,b)=>a.top-b.top).forEach(r=>{
+                                const row=rows.find(x=>Math.min(x.bottom,r.bottom)-Math.max(x.top,r.top)>1.5);
+                                if(row){row.top=Math.max(row.top,r.top);row.bottom=Math.min(row.bottom,r.bottom);}
+                                else rows.push({top:r.top,bottom:r.bottom});
+                            });
+                        return rows.length;
+                    };
+                    const beforeRows=rowCount();
+                    if (beforeRows>1) {
+                        const next=spacer?.nextSibling;
+                        delete leftSendForm.dataset.copybotSpacer;
+                        spacer?.remove();
+                        if (rowCount()>=beforeRows) {
+                            if (spacerSide) leftSendForm.dataset.copybotSpacer=spacerSide;
+                            if (spacer) leftSendForm.insertBefore(spacer,next||null);
+                        }
+                    }
+                }
                 const measure = () => {
                     const cs = getComputedStyle(leftSendForm);
                     const b = leftSendForm.getBoundingClientRect();
                     const stRects = Array.from(leftSendForm.children)
                         .filter(c => !icons.includes(c) && !c.classList.contains('copybot_bl_break') && !c.classList.contains('copybot_rb_spacer'))
+                        .filter(c => !(scriptDock?.box === leftSendForm && /^stscript_(pause|continue|stop)$/.test(c.id)))
+                        // 생성 정지는 빈 전송 칸의 중앙에 겹쳐 있다. 줄 높이는 그 빈 칸으로 잰다.
+                        .filter(c => !(scriptDock?.box === leftSendForm && c.id === 'mes_stop' && getComputedStyle(c).position === 'fixed'))
                         .map(c => c.getBoundingClientRect()).filter(r => r.width > 0 && r.height > 0);
                     const stBottom = stRects.length ? Math.max(...stRects.map(r => r.bottom)) : null;
                     const rects = icons.map(i => i.getBoundingClientRect());
@@ -557,7 +676,8 @@
                     const inside = shown.every(r => r.top >= b.top - 1 && r.bottom <= b.bottom + 1 && r.left >= b.left - 1 && r.right <= b.right + 1);
                     // 잘림은 아이콘을 넣기 전 기준선(테마 자체의 넘침)보다 더 넘칠 때만
                     const base = String(leftSendForm.dataset.copybotOverflow || '0x0').split('x').map(n => Number(n) || 0);
-                    const clipped = (leftSendForm.scrollHeight - leftSendForm.clientHeight) > base[1] + 1 || (leftSendForm.scrollWidth - leftSendForm.clientWidth) > base[0] + 1;
+                    const clipped = (/auto|scroll|hidden|clip/.test(cs.overflowY) && (leftSendForm.scrollHeight - leftSendForm.clientHeight) > base[1] + 1) ||
+                        (/auto|scroll|hidden|clip/.test(cs.overflowX) && (leftSendForm.scrollWidth - leftSendForm.clientWidth) > base[0] + 1);
                     const wrapped = (stBottom === null || !shown.length) ? true : Math.min(...shown.map(r => r.top)) >= stBottom - 1;
                     const flexOk = cs.display.includes('flex') && cs.flexWrap === 'wrap' && cs.flexDirection === 'row';
                     return { allShown: shown.length === icons.length, inside, clipped, wrapped, flexOk };
@@ -582,6 +702,162 @@
             } catch (error) {
                 debugLog('아랫줄 아이콘 자가 검사 중 오류 — 그대로 둠', error);
             }
+        },
+
+        // 상대의 레이아웃을 고치지 않는다. 맞지 않는 우리 아이콘만 별도 줄로 물러난다.
+        verifyInputLayout: function() {
+            if (!usableInputViewport()) return;
+            if (compatPending) return; // 테마 전환 중간 좌표를 충돌로 오판하지 않는다.
+            syncScriptControls();
+            syncExecutionWidths();
+            const textarea = document.querySelector('#send_textarea');
+            const host = textarea?.closest('#send_form');
+            if (!host) return;
+            const own = [...host.querySelectorAll('.copybot_input_field_icon')];
+            if (!own.length) return;
+            spaceOverflowTray(host);
+            positionIndependentContainers(host);
+            const inline = own.filter(el => !el.closest('.copybot_independent_container, .copybot_overflow_container'));
+            if (!inline.length) return;
+            const native = [...host.querySelectorAll('#leftSendForm > div, #rightSendForm > div, #send_but, #mes_stop, .stscript_btn, .dm-compact--button')]
+                .filter(el => !el.classList.contains('copybot_input_field_icon') && shown(el));
+            const badParents = new Set();
+            const taRect = textarea.getBoundingClientRect();
+            // QR도 입력칸 안에 놓일 공간은 필요하다. 실행 중 재갱신으로 우리 버튼이
+            // 입력칸을 눌러 기본 제어 버튼까지 화면 밖으로 밀면 우리 쪽이 먼저 물러난다.
+            const crowded = taRect.width < Math.min(96, innerWidth / 4);
+            inline.forEach((el, i) => {
+                const r = el.getBoundingClientRect();
+                if (crowded || !shown(el) || outsideViewport(r) || clippedByParent(el) ||
+                    native.some(other => rectanglesOverlap(r, other.getBoundingClientRect())) ||
+                    inline.slice(i + 1).some(other => shown(other) && rectanglesOverlap(r, other.getBoundingClientRect()))) badParents.add(el.parentElement);
+            });
+            // 좁은 옆 상자에 우리 버튼만 세로로 쌓이면 잘림 없이도 입력부가
+            // 커다란 빈 상자로 늘어난다. 추가 전 높이 + 버튼 한 줄을 넘고,
+            // 실제 우리 버튼도 여러 줄을 차지할 때 기존 별도 줄로 양보한다.
+            if (inputBaseline?.row === textarea.closest('#nonQRFormItems')) {
+                const parents = new Set(inline.map(el => el.parentElement));
+                parents.forEach(box => {
+                    const children = inline.filter(el => el.parentElement === box && shown(el));
+                    if (children.length < 2) return;
+                    const rects = children.map(el => el.getBoundingClientRect());
+                    const buttonHeight = Math.max(...rects.map(r => r.height));
+                    const gap = parseFloat(getComputedStyle(box).rowGap) || 0;
+                    const span = Math.max(...rects.map(r => r.bottom)) - Math.min(...rects.map(r => r.top));
+                    if (box.getBoundingClientRect().height > inputBaseline.height + buttonHeight + gap + 1.5 &&
+                        span > buttonHeight + gap + 1.5) badParents.add(box);
+                });
+            }
+            if (!badParents.size) return;
+            const displaced = inline.filter(el => badParents.has(el.parentElement));
+            let tray = host.querySelector('.copybot_overflow_container');
+            if (!tray) {
+                tray = document.createElement('div');
+                tray.className = 'copybot_overflow_container';
+                tray.style.cssText = 'display:flex;flex-wrap:wrap;flex:0 0 auto;gap:4px;align-items:center;align-self:stretch;justify-content:flex-end;box-sizing:border-box;width:100%;max-width:100%;max-height:40vh;overflow:auto;padding:4px;';
+                host.appendChild(tray);
+            }
+            const reference = document.querySelector('#send_but');
+            const refRect = reference?.getBoundingClientRect();
+            const refStyle = getComputedStyle(reference || textarea);
+            const cachedReference = scriptReferenceSizes.get(reference);
+            const idleWidth = referenceSizeMatches(cachedReference, refStyle) ? cachedReference.width : 0;
+            const size = Math.max(24, Math.min(48, refRect?.width || idleWidth || parseFloat(refStyle.fontSize) || 32));
+            displaced.sort((a,b) => Number(a.dataset.cbPriority || 0) - Number(b.dataset.cbPriority || 0)).forEach(el => {
+                el.style.order = '';
+                el.style.flex = '0 0 auto';
+                el.style.width = `${size}px`;
+                el.style.height = `${size}px`;
+                el.style.display = 'flex';
+                el.style.alignItems = 'center';
+                el.style.justifyContent = 'center';
+                const side = /^(left|bottom_left)$/.test(el.dataset.copybotInputPosition) ? 'left' : 'right';
+                let group = tray.querySelector(`[data-copybot-overflow-side="${side}"]`);
+                if (!group) {
+                    group = document.createElement('div');
+                    group.className = 'copybot_overflow_group';
+                    group.dataset.copybotOverflowSide = side;
+                    group.style.cssText = 'display:flex;flex-wrap:wrap;flex:0 1 auto;gap:4px;align-items:center;min-width:0;max-width:100%;';
+                    group.style.justifyContent = side === 'left' ? 'flex-start' : 'flex-end';
+                    if (side === 'left') { group.style.marginRight = 'auto'; tray.prepend(group); }
+                    else tray.appendChild(group);
+                }
+                group.appendChild(el);
+            });
+            tray.querySelectorAll('.copybot_overflow_group').forEach(group => {
+                [...group.children].sort((a,b)=>Number(a.dataset.cbPriority||0)-Number(b.dataset.cbPriority||0)).forEach(el=>group.appendChild(el));
+            });
+            badParents.forEach(box => {
+                if (box.dataset.copybotLayout !== '1' || box.querySelector('.copybot_input_field_icon')) return;
+                if ('copybotMaxWidth' in box.dataset) box.style.maxWidth = box.dataset.copybotMaxWidth;
+                box.style.flexWrap = box.dataset.copybotFlexWrap || '';
+                box.querySelectorAll('.copybot_bl_break,.copybot_rb_spacer').forEach(el => el.remove());
+                for (const key of ['copybotLayout','copybotMaxWidth','copybotFlexWrap','copybotBreak','copybotSpacer','copybotOverflow','copybotFallback']) delete box.dataset[key];
+                executionWidths.delete(box);
+            });
+            // 우리 아이콘을 뺀 뒤 넓어진 입력칸을 기준으로 QR 위치를 다시 정한다.
+            syncScriptControls();
+            syncExecutionWidths();
+            spaceOverflowTray(host);
+            positionIndependentContainers(host);
+            // 우리 아이콘이 줄에서 빠지면 상대 아이콘의 가운데 정렬 기준도 달라진다.
+            // 평상시 새 줄 높이로 호환 정렬을 마무리해야 첫 QR 때 재정렬되지 않는다.
+            if (executionState() === '00' && this.isCompatIconsEnabled()) this.refreshCompatIcons();
+            debugLog('입력부 공간 부족 — 복사기 아이콘만 별도 줄로 이동', displaced.length);
+        },
+
+        // 특정 실행 상태만 관찰한다. 아이콘/호환 기능을 끄면 해제하며 폴링하지 않는다.
+        refreshExecutionWatch: function() {
+            if (!this.anyIconConfigured()) { this.disposeExecutionWatch(); return; }
+            const host = document.querySelector('#form_sheld');
+            if (!host || typeof MutationObserver === 'undefined') return;
+            if (executionHost !== host) {
+                this.disposeExecutionWatch();
+                executionHost = host;
+                executionObserver = new MutationObserver(() => {
+                    const state = executionState();
+                    const signal = state + (host.classList.contains('script_paused') ? '1' : '0');
+                    if (signal === lastExecutionState) return;
+                    lastExecutionState = signal;
+                    // 실행 종료는 설정 변경이 아니다. 정상 배치와 공간 부족으로 물러난
+                    // 배치를 모두 유지하고 임시 제어 버튼의 스타일만 원복한다.
+                    syncScriptControls(); syncExecutionWidths(); this.refreshCompatIcons(); scheduleLayoutCheck();
+                });
+                executionObserver.observe(host, { attributes: true, attributeFilter: ['class'] });
+                executionObserver.observe(document.body, { attributes: true, attributeFilter: ['data-generating'] });
+                window.addEventListener('resize', scheduleLayoutCheck);
+                window.visualViewport?.addEventListener('resize', scheduleLayoutCheck);
+            }
+            lastExecutionState = executionState() + (host.classList.contains('script_paused') ? '1' : '0');
+            const select=document.querySelector('#themes');
+            if (layoutThemeSelect !== select) {
+                if (layoutThemeSelect) $(layoutThemeSelect).off('change.copybotInputLayout');
+                layoutThemeSelect=select;
+                if (select) $(select).on('change.copybotInputLayout',()=>{
+                    clearTimeout(layoutThemeTimer);
+                    // 같은 body class를 쓰는 테마끼리도 선택 변경은 명시적으로 온다.
+                    // 실리의 테마 적용 핸들러가 끝난 뒤 한 번만 다시 배치한다.
+                    layoutThemeTimer=setTimeout(()=>{layoutThemeTimer=0;this.updateInputFieldIcons();},100);
+                });
+            }
+            syncScriptControls();
+            syncExecutionWidths();
+        },
+        disposeExecutionWatch: function() {
+            clearTimeout(compatReleaseTimer);compatReleaseTimer=0;
+            clearTimeout(layoutThemeTimer);layoutThemeTimer=0;
+            if (layoutThemeSelect) $(layoutThemeSelect).off('change.copybotInputLayout');
+            layoutThemeSelect=null;
+            executionObserver?.disconnect();
+            executionObserver = null;
+            executionHost = null;
+            window.removeEventListener('resize', scheduleLayoutCheck);
+            window.visualViewport?.removeEventListener('resize', scheduleLayoutCheck);
+            if (layoutFrame) cancelAnimationFrame(layoutFrame);
+            layoutFrame = 0;
+            deferredLayoutUpdate = false;
+            restoreExecutionWidths();
+            restoreScriptControls();
         },
 
         // 안전한 아이콘 업데이트 함수 (DOM 안정화 대기 포함) (index.js에서 이동)
@@ -659,6 +935,325 @@
     };
 
     // 내부 헬퍼 함수들
+    let executionObserver = null, executionHost = null, lastExecutionState = '00';
+    const executionWidths = new Map();
+    let scriptDock = null;
+    const scriptReferenceSizes = new WeakMap();
+    let layoutFrame = 0;
+    let deferredLayoutUpdate = false;
+    let renderedInput = null;
+    let inputBaseline = null;
+    function inputRenderSignature() {
+        try {
+            const values=['tag_remove','delete','delete_regenerate','quickmenu','ghostwrite'].map(key=>{
+                const id='#copybot_'+key;
+                return [$(id+'_toggle').attr('data-enabled'),$(id+(key==='quickmenu'?'_input_icon':'_inputfield')).prop('checked'),
+                    key==='ghostwrite'?$('input[name="copybot_ghostwrite_position"]:checked').val():$(id+(key==='quickmenu'?'_icon_position':'_position')).val(),$(id+'_icon_picker').data('icon')];
+            });
+            return JSON.stringify([innerWidth,innerHeight,document.querySelector('#themes')?.value,
+                document.querySelector('#custom-style')?.textContent,$('#copybot_compat_input_icons_toggle').attr('data-enabled'),
+                values,window.CopyBotUI?.getIconOrder?.(),window.CopyBotActions?.getEnabledSlots?.()]);
+        } catch { return null; }
+    }
+    function usableInputViewport() {
+        // 버튼 하나도 놓을 수 없는 전환 중간값에서는 읽기·배치 변경을 보류한다.
+        // 기존 resize/실행 상태 알림에서 다시 확인하며 타이머나 반복 프레임을 만들지 않는다.
+        const viewport = window.visualViewport;
+        return innerWidth >= 32 && innerHeight >= 32 &&
+            (!viewport || (viewport.width >= 32 && viewport.height >= 32));
+    }
+    function scheduleLayoutCheck() {
+        if (layoutFrame) return;
+        layoutFrame = requestAnimationFrame(() => {
+            layoutFrame = 0;
+            if (!usableInputViewport()) return;
+            if (deferredLayoutUpdate) { deferredLayoutUpdate = false; window.CopyBotIcons.updateInputFieldIcons(); }
+            else window.CopyBotIcons.verifyInputLayout();
+        });
+    }
+    function shown(el) {
+        const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+        return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none';
+    }
+    function unobstructedInInput(el, x, y) {
+        // QR 메뉴·팝업이 잠시 입력부를 덮는 것은 입력부 자체의 배치 실패가 아니다.
+        // 메뉴를 닫거나 위로 뚫지 않고, 같은 입력부 안의 겹침·잘림만 판정한다.
+        const host = el.closest('#send_form');
+        const stack = document.elementsFromPoint?.(x, y) || [document.elementFromPoint(x, y)];
+        const hit = stack.find(node => node && host?.contains(node));
+        return !!hit && el.contains(hit);
+    }
+    function outsideViewport(r) { return r.left < -1.5 || r.right > innerWidth + 1.5 || r.top < -1.5 || r.bottom > innerHeight + 1.5; }
+    function clippedByParent(el) {
+        const r = el.getBoundingClientRect();
+        for (let parent = el.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+            const s = getComputedStyle(parent), b = parent.getBoundingClientRect();
+            if (/auto|scroll|hidden|clip/.test(s.overflowX) && (r.left < b.left-1.5 || r.right > b.right+1.5)) return true;
+            if (/auto|scroll|hidden|clip/.test(s.overflowY) && (r.top < b.top-1.5 || r.bottom > b.bottom+1.5)) return true;
+        }
+        return false;
+    }
+    function rectanglesOverlap(a,b) { return Math.min(a.right,b.right)-Math.max(a.left,b.left)>1.5 && Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1.5; }
+    function spaceOverflowTray(host) {
+        const tray = host.querySelector('.copybot_overflow_container');
+        const row = host.querySelector('#nonQRFormItems');
+        if (!tray || !row) return;
+        tray.style.paddingTop = '4px';tray.style.paddingBottom = '4px';
+        const r = tray.getBoundingClientRect(), line = row.getBoundingClientRect();
+        const other = [...row.querySelectorAll('#leftSendForm > div,#rightSendForm > div,.dm-compact--button')]
+            .filter(el=>!el.classList.contains('copybot_input_field_icon')&&shown(el)).map(el=>el.getBoundingClientRect());
+        if (!other.length) return;
+        if (r.top < line.top) tray.style.paddingBottom = `${4+Math.max(0,line.top-Math.min(...other.map(x=>x.top)))}px`;
+        else tray.style.paddingTop = `${4+Math.max(0,Math.max(...other.map(x=>x.bottom))-line.bottom)}px`;
+    }
+    function positionIndependentContainers(host) {
+        const parentRect = host.getBoundingClientRect();
+        const obstacles = [...host.querySelectorAll('#nonQRFormItems, #leftSendForm > div, #rightSendForm > div, .dm-compact--button')].filter(shown).map(el=>el.getBoundingClientRect());
+        const top = Math.min(parentRect.top,...obstacles.map(r=>r.top));
+        const bottom = Math.max(parentRect.bottom,...obstacles.map(r=>r.bottom));
+        host.querySelectorAll('.copybot_independent_container').forEach(box => {
+            if (box.dataset.copybotInFlow === '1') return;
+            const usableWidth = Math.max(32, Math.min(parentRect.width, innerWidth - 16));
+            // auto 폭은 right 보정 때마다 shrink-to-fit 폭이 늘어 줄이 바뀐다.
+            // 우리 묶음의 내용 폭을 기준으로 하고 실제 사용 가능 폭에서만 줄인다.
+            box.style.width = 'max-content';
+            box.style.maxWidth = `${usableWidth}px`;
+            box.style.maxHeight = '40vh';
+            box.style.overflow = 'auto';
+            const r = box.getBoundingClientRect();
+            const above = top >= r.height + 8;
+            if (!above && innerHeight - bottom < r.height + 8) {
+                // 공간이 없으면 우리 상자만 일반 흐름으로 물러난다.
+                box.style.position = 'relative';box.style.top = '';box.style.right = '';box.style.left = '';box.style.transform = 'none';
+                box.dataset.copybotInFlow = '1';
+                return;
+            }
+            box.style.transform = 'none';
+            box.style.top = `${(above ? top-r.height-4 : bottom+4)-parentRect.top}px`;
+            const current = box.getBoundingClientRect();
+            const shift = current.left < 8 ? 8-current.left : current.right > innerWidth-8 ? innerWidth-8-current.right : 0;
+            if (shift) box.style.right = `${(parseFloat(box.style.right)||0)-shift}px`;
+            if (clippedByParent(box)) {
+                box.style.position = 'relative';box.style.top = '';box.style.right = '';box.style.left = '';box.style.transform = 'none';
+                box.dataset.copybotInFlow = '1';
+            }
+        });
+    }
+    function executionState() {
+        return (document.querySelector('#form_sheld')?.classList.contains('isExecutingCommandsFromChatInput') ? '1' : '0') +
+            (document.body?.dataset.generating === 'true' ? '1' : '0');
+    }
+    // QR 제어 버튼은 원래 DOM/이벤트/색상을 유지한 채 입력칸의 빈 공간에만 잠시 놓는다.
+    // 격자·클리핑·불명확한 크기에서는 테마를 덮어쓰지 않고 기존 배치로 양보한다.
+    function restoreScriptControls() {
+        if (!scriptDock) return;
+        const dock = scriptDock; scriptDock = null;
+        dock.styles.forEach((props, el) => props.forEach((saved, name) => {
+            if (el.style.getPropertyValue(name) !== saved.applied || el.style.getPropertyPriority(name)) return;
+            if (saved.value) el.style.setProperty(name, saved.value, saved.priority);
+            else el.style.removeProperty(name);
+        }));
+        dock.originalStyleAttrs.forEach((value,el)=>{if(value===null&&!el.getAttribute('style'))el.removeAttribute('style')});
+        dock.placeholder?.remove();
+    }
+    function syncScriptControls() {
+        if (!document.querySelector('.copybot_input_field_icon')) { restoreScriptControls(); return; }
+        if (!usableInputViewport()) return;
+        const textarea = document.querySelector('#send_textarea'), send = document.querySelector('#send_but');
+        const box = send?.parentElement;
+        const state = executionState();
+        if (state === '00') {
+            restoreScriptControls();
+            if (send && shown(send)) { const r=send.getBoundingClientRect(),style=getComputedStyle(send);scriptReferenceSizes.set(send,{width:r.width,height:r.height,opacity:style.opacity,viewportWidth:innerWidth,signature:scriptReferenceSignature(style)}); }
+            return;
+        }
+        if (!textarea || !box || !send || send.parentElement !== box || !box.parentElement?.contains(textarea)) { restoreScriptControls(); return; }
+        const cs = getComputedStyle(box), rs = getComputedStyle(send);
+        const controls = ['stscript_pause','stscript_continue','stscript_stop'].map(id=>document.getElementById(id));
+        const generationStop = box.querySelector('#mes_stop');
+        if (!/flex|grid/.test(cs.display) || cs.transform !== 'none' || !generationStop || controls.some(el=>!el || el.parentElement!==box)) { restoreScriptControls(); return; }
+        const px = value => parseFloat(value) || 0;
+        const dimension = (style, name) => {
+            if (!/^\d+(?:\.\d+)?px$/.test(style[name])) return null;
+            const sides = name === 'width' ? ['Left','Right'] : ['Top','Bottom'];
+            return px(style[name]) + (style.boxSizing==='border-box' ? 0 : sides.reduce((n,side)=>n+px(style['padding'+side])+px(style['border'+side+'Width']),0));
+        };
+        const cached=scriptReferenceSizes.get(send);
+        const cachedSize=referenceSizeMatches(cached,rs)?cached:null;
+        const sendWidth = cachedSize?.width || dimension(rs,'width'), sendHeight = cachedSize?.height || dimension(rs,'height');
+        const visible = controls.filter(shown);
+        if (!sendWidth || !sendHeight || (visible.length!==0 && visible.length!==2)) { restoreScriptControls(); return; }
+        const sizes = visible.map(el=>el.getBoundingClientRect());
+        if (sizes.some(r=>!r.width||!r.height)) { restoreScriptControls(); return; }
+        // 제어 버튼을 원래 줄에서 뺀 뒤의 입력칸으로 공간을 판단한다.
+        // 아직 줄을 차지한 상태의 좁은 입력칸으로 판단하면 스스로 도킹을 막는다.
+        if (scriptDock?.box !== box) restoreScriptControls();
+        if (!scriptDock) {
+            scriptDock = {box,styles:new Map(),placeholder:null,originalStyleAttrs:new Map([...controls,generationStop,send].map(el=>[el,el.getAttribute('style')]))};
+        }
+        const dock=scriptDock;
+        const write=(el,name,value)=>{
+            let props=dock.styles.get(el);if(!props){props=new Map();dock.styles.set(el,props)}
+            let saved=props.get(name);if(!saved){saved={value:el.style.getPropertyValue(name),priority:el.style.getPropertyPriority(name),applied:null};props.set(name,saved)}
+            el.style.setProperty(name,value);saved.applied=el.style.getPropertyValue(name);
+        };
+        // 숨겨진 0크기 전송 요소도 셀/간격 하나를 차지한다. 별도 칸을 더 만들지
+        // 않고 그 숨겨진 칸의 기존 크기만 유지한다. 테마의 important 크기는 건드리지 않는다.
+        if (rs.display !== 'none' && rs.visibility === 'hidden') {
+            for (const [name,value] of [['width',sendWidth],['height',sendHeight]]) {
+                const sides=name==='width'?['Left','Right']:['Top','Bottom'];
+                const extra=rs.boxSizing==='border-box'?0:sides.reduce((n,side)=>n+px(rs['padding'+side])+px(rs['border'+side+'Width']),0);
+                const size=Math.max(0,value-extra);
+                // border가 있으면 0으로 접힌 칸도 계산상 2px가 될 수 있다.
+                if (!send.style.getPropertyPriority(name) && px(rs[name]) < size) write(send,name,`${size}px`);
+            }
+        }
+        const sendRect=send.getBoundingClientRect();
+        const sendKeepsSpace=sendRect.width>0&&sendRect.height>0&&!/absolute|fixed/.test(rs.position);
+        // QR은 전송 칸만 0×0으로 접고 ::before 글리프는 남긴다. 그 보이지 않는
+        // 글리프가 오른쪽 상자의 가로 스크롤을 늘리므로, 접힌 요소 안에서만 자른다.
+        const foldedSend = sendRect.width === 0 && sendRect.height === 0 && rs.visibility === 'hidden';
+        for (const [name,key] of [['overflow-x','overflowX'],['overflow-y','overflowY']]) {
+            const props=dock.styles.get(send),saved=props?.get(name);
+            if(saved&&(send.style.getPropertyValue(name)!==saved.applied||send.style.getPropertyPriority(name))){props.delete(name);continue;}
+            if(foldedSend){
+                if(!saved&&(rs[key]!=='visible'||send.style.getPropertyPriority(name)))continue;
+                write(send,name,'clip');
+            }else if(saved){
+                if(saved.value)send.style.setProperty(name,saved.value,saved.priority);else send.style.removeProperty(name);
+                props.delete(name);
+            }
+        }
+        if (!sendKeepsSpace) {
+            if (!dock.placeholder) {
+                const placeholder=document.createElement('span');placeholder.className='copybot_qr_placeholder';placeholder.setAttribute('aria-hidden','true');
+                placeholder.style.cssText='display:block;position:static;flex:0 0 auto;visibility:hidden;pointer-events:none;box-sizing:border-box;';
+                dock.placeholder=placeholder;
+            }
+            Object.assign(dock.placeholder.style,{width:`${sendWidth}px`,height:`${sendHeight}px`,margin:rs.margin,order:rs.order,fontSize:rs.fontSize,color:rs.color,backgroundColor:rs.backgroundColor,border:rs.border,borderRadius:rs.borderRadius,padding:rs.padding,opacity:cachedSize?.opacity||'1'});
+            // 크기 없는 요소를 먼저 붙이면 테마의 transition이 0→크기를 애니메이션한다.
+            // 완성된 자리표시를 붙여 첫 검사부터 실제 칸 크기를 쓰게 한다.
+            if (!dock.placeholder.isConnected) box.insertBefore(dock.placeholder,send);
+        } else { dock.placeholder?.remove();dock.placeholder=null; }
+        // fixed는 오른쪽 상자의 overflow를 바꾸지 않고 그 바깥 입력칸에 그리기 위한 것뿐이다.
+        controls.forEach(el=>write(el,'position','fixed'));
+        write(generationStop,'position','fixed');
+        // 테마가 입력칸에 층을 지정했으면 그 칸에 놓는 제어 버튼도 같은 층을 쓴다.
+        // 전역 최상위 값이나 !important로 팝업 위에 올라가지 않는다.
+        const inputLayer = getComputedStyle(textarea).zIndex;
+        if (inputLayer === 'auto' || /^\d+$/.test(inputLayer)) {
+            [...controls,generationStop].forEach(el=>{
+                const beforeInput=!!(el.compareDocumentPosition(textarea)&Node.DOCUMENT_POSITION_FOLLOWING);
+                const layer=Math.max(1,Number(inputLayer)||0)+(beforeInput&&Number(inputLayer)>0?1:0);
+                if (getComputedStyle(el).zIndex === 'auto' && !el.style.getPropertyPriority('z-index')) write(el,'z-index',String(layer));
+            });
+        }
+        // 생성 정지 버튼의 크기가 달라도 전송 버튼이 차지하던 자리는 그대로 둔다.
+        // 세로 배치에서도 뒤쪽 아이콘이 작은 정지 버튼만큼 당겨지지 않는다.
+        const slot = (dock.placeholder || send).getBoundingClientRect();
+        const place = (el,x,y) => {
+            const style=getComputedStyle(el);
+            // blur/transform 조상은 fixed의 좌표 기준도 된다. 화면 좌표를 그 기준으로
+            // 한 번만 변환한다. 두 번 쓰고 실측 보정하면 테마의 transition 중간값을
+            // 읽어 부모 높이만큼 잘못 더하는 문제가 생긴다.
+            const parent=el.offsetParent;
+            const origin=parent?.getBoundingClientRect();
+            const scaleX=origin&&parent.offsetWidth?origin.width/parent.offsetWidth:1;
+            const scaleY=origin&&parent.offsetHeight?origin.height/parent.offsetHeight:1;
+            const left=origin?(x-origin.left)/scaleX-parent.clientLeft+parent.scrollLeft:x;
+            const top=origin?(y-origin.top)/scaleY-parent.clientTop+parent.scrollTop:y;
+            write(el,'left',`${left-px(style.marginLeft)}px`);write(el,'top',`${top-px(style.marginTop)}px`);
+        };
+        // 전송 버튼을 계속 보여 주는 테마에서는 같은 칸을 정지 버튼과 겹쳐 쓰지 않는다.
+        let generationInInput = shown(generationStop) && shown(send) && Number(rs.opacity) > 0;
+        let generationSlotFailed = false;
+        if (shown(generationStop) && !generationInInput) {
+            const stopRect=generationStop.getBoundingClientRect();
+            // 중심을 맞추므로 크기 차이의 절반이 각 변으로 나온다(변당 허용 오차 1.5px).
+            generationSlotFailed=stopRect.width>slot.width+3||stopRect.height>slot.height+3;
+            if(!generationSlotFailed){
+                place(generationStop,slot.left+(slot.width-stopRect.width)/2,slot.top+(slot.height-stopRect.height)/2);
+                const r=generationStop.getBoundingClientRect();
+                generationSlotFailed=outsideViewport(r)||!unobstructedInInput(generationStop,r.left+r.width/2,r.top+r.height/2);
+            }
+            if(generationSlotFailed){
+                generationInInput = true;
+            }
+        }
+        const inInput = [...visible, ...(generationInInput ? [generationStop] : [])];
+        if (!inInput.length) return;
+        // our max-width stays in place while the controls leave normal flow.
+        const input=textarea.getBoundingClientRect();
+        const placedSizes=inInput.map(el=>el.getBoundingClientRect());
+        const placedWidth=placedSizes.reduce((sum,r)=>sum+r.width,0)+4*(inInput.length-1),placedHeight=Math.max(...placedSizes.map(r=>r.height));
+        if(input.width<placedWidth+12||input.height<placedHeight){restoreScriptControls();return}
+        const start=input.right-placedWidth-6, top=input.top+(input.height-placedHeight)/2;
+        let nextX=start;
+        inInput.forEach((el,index)=>{
+            place(el,nextX,top);
+            nextX+=placedSizes[index].width+4;
+        });
+        const failed=inInput.some(el=>{
+            const r=el.getBoundingClientRect();
+            // 둥근 버튼의 잘려 나간 네모 모서리는 클릭 영역이 아니다. 버튼 안쪽을 확인한다.
+            const points=[[.25,.25],[.75,.75],[.5,.5]].map(([x,y])=>[r.left+r.width*x,r.top+r.height*y]);
+            return getComputedStyle(el).position!=='fixed'||outsideViewport(r)||r.left<input.left-1||r.right>input.right+1||r.top<input.top-1||r.bottom>input.bottom+1||points.some(([x,y])=>!unobstructedInInput(el,x,y));
+        });
+        if (failed) restoreScriptControls();
+    }
+    function scriptReferenceSignature(style) {
+        return [style.fontSize,style.lineHeight,style.padding,style.border,document.querySelector('#themes')?.value||''].join('|');
+    }
+    function referenceSizeMatches(cached, style) {
+        // 폰의 CSS 픽셀 반올림(411↔412)만으로 실행 중 전송 칸의 기준을 버리지 않는다.
+        // 테마·글꼴·여백·테두리가 바뀌거나 실제 폭 차이가 더 크면 재사용하지 않는다.
+        return !!cached && cached.signature === scriptReferenceSignature(style) &&
+            Math.abs(cached.viewportWidth - innerWidth) <= 1;
+    }
+    function generationReplacementDelta(box, reference) {
+        if (!reference || reference.parentElement !== box || shown(reference)) return null;
+        if (scriptDock?.box===box && scriptDock.placeholder) return 0;
+        if (executionState() !== '01' && !(executionState()==='11'&&scriptDock?.box===box)) return null;
+        const stop = box.querySelector('#mes_stop');
+        if (!stop || !shown(stop)) return null;
+        const rs = getComputedStyle(reference), ss = getComputedStyle(stop);
+        const width = parseFloat(rs.width);
+        // QR은 전송 버튼을 0px로 접기도 한다. 같은 테마에서 직전에 실측한 값만 재사용한다.
+        if (rs.transform !== 'none' || ss.transform !== 'none') return null;
+        const px = value => parseFloat(value) || 0;
+        const cached=scriptReferenceSizes.get(reference);
+        const measured=scriptDock?.box===box&&referenceSizeMatches(cached,rs)?cached.width:null;
+        const refWidth = /^\d+(?:\.\d+)?px$/.test(rs.width)&&Number.isFinite(width)&&width>0 ? width + (rs.boxSizing === 'border-box' ? 0 : px(rs.paddingLeft)+px(rs.paddingRight)+px(rs.borderLeftWidth)+px(rs.borderRightWidth)) : measured;
+        if (!refWidth) return null;
+        const delta = refWidth + px(rs.marginLeft)+px(rs.marginRight) - stop.getBoundingClientRect().width - px(ss.marginLeft)-px(ss.marginRight);
+        return Math.max(0, delta);
+    }
+    function restoreExecutionWidths() {
+        executionWidths.forEach((saved, box) => {
+            // 다른 코드가 바꿨으면 그 값을 덮어쓰지 않는다.
+            if (box.style.maxWidth === saved.released) box.style.maxWidth = saved.limit;
+        });
+        executionWidths.clear();
+    }
+    function syncExecutionWidths() {
+        if (!usableInputViewport()) return;
+        restoreExecutionWidths();
+        if (executionState() === '00') return;
+        document.querySelectorAll('[data-copybot-layout="1"]').forEach(box => {
+            if (scriptDock?.box===box) return;
+            const controls = [...box.querySelectorAll('#stscript_pause,#stscript_continue,#stscript_stop,#mes_stop')];
+            if (!controls.some(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'; })) return;
+            if (!('copybotMaxWidth' in box.dataset) || box.dataset.copybotFallback) return;
+            // 일반 생성은 전송 버튼 자리를 유지한다. QR처럼 새 제어 버튼이 추가될 때만 넓힌다.
+            if (generationReplacementDelta(box, document.querySelector('#send_but')) !== null) return;
+            // QR·생성 중에는 입력 공간을 사용하도록 우리 최대 폭만 해제한다.
+            // 생성 중 더 작은 정지 버튼을 기준으로 재계산한 폭에 하단 아이콘이 갈라지지 않게 한다.
+            // 테마의 width/max-width/배치 방향, 네이티브 버튼 순서는 건드리지 않는다.
+            const saved = { limit: box.style.maxWidth, released: box.dataset.copybotMaxWidth || '' };
+            box.style.maxWidth = saved.released;
+            executionWidths.set(box, saved);
+        });
+    }
 
     // 좌하단 줄: 우리 요소끼리의 순서값(우리 요소에만 준다). 테마가 실리 버튼에 큰 order 를 줘도 우리 줄이 맨 뒤에 오게 정수 최댓값 근처를 쓴다
     const ORDER_BREAK = 2147483646;
@@ -695,7 +1290,21 @@
         } catch (e) { /* 무시 */ }
     }
     let compatSeq = 0;   // 호환 적용 회차 — 늦게 깨어난 1회 타이머가 더 새 적용을 덮지 않게
-    // 요소의 계산된 전환 시간(가장 긴 duration+delay, ms). 테마가 transition 을 !important 로 강제하면 우리 규칙의 none 이 지므로 실제 값을 읽는다
+    let compatPending = false;
+    let compatReleaseTimer = 0;
+    let layoutThemeSelect = null;
+    let layoutThemeTimer = 0;
+    let compatIdleLayout = null;
+    function compatLayoutSignature() {
+        return [document.querySelector('#themes')?.value || '', innerWidth,
+            getComputedStyle(document.documentElement).fontSize].join('|');
+    }
+    function compatReferenceAppearance(el) {
+        const s=getComputedStyle(el);
+        return ['fontSize','lineHeight','padding','margin','border','borderRadius','color','backgroundColor','opacity','filter'].map(k=>s[k]).join('|');
+    }
+    // 배치에 영향을 주는 전환의 duration+delay만 기다린다. 색상 전환까지
+    // 기다리면 이미 안정된 배치 정리가 첫 응답 시점으로 밀릴 수 있다.
     function transitionMs(el) {
         try {
             const cs = getComputedStyle(el);
@@ -703,7 +1312,11 @@
             const toMs = (s) => { const v = parseFloat(s); if (!isFinite(v)) return 0; return /ms$/.test(s.trim()) ? v : v * 1000; };
             const durs = String(cs.transitionDuration || '0s').split(','), delays = String(cs.transitionDelay || '0s').split(',');
             let max = 0;
-            durs.forEach((d, i) => { max = Math.max(max, toMs(d) + toMs(delays[i % delays.length] || '0s')); });
+            const paintOnly = /^(color|opacity|background(?:-.+)?|border(?:-(?:top|right|bottom|left))?-color|box-shadow|text-shadow)$/;
+            String(cs.transitionProperty).split(',').forEach((property, i) => {
+                if (paintOnly.test(property.trim())) return;
+                max = Math.max(max, toMs(durs[i % durs.length] || '0s') + toMs(delays[i % delays.length] || '0s'));
+            });
             return Math.min(max, 2000);
         } catch (e) { return 0; }
     }

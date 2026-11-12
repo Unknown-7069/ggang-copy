@@ -250,7 +250,7 @@
     // 나머지는 async=false 로 한꺼번에 삽입 → 다운로드는 병렬, 실행은 배열 순서. 하나라도 실패하면 reject(실패한 것만 재시도 때 다시 로드).
     const MODULE_FILES = [
         'settings.js', 'presets.js', 'commands.js', 'generation.js', 'actions.js', 'shortcut.js', 'capture.js',
-        'icons.js', 'profiles.js', 'ghostwrite.js', 'messageOperations.js', 'ui.js', 'wandMenu.js'
+        'icons.js', 'profiles.js', 'personaSort.js', 'ghostwrite.js', 'messageOperations.js', 'ui.js', 'wandMenu.js'
     ];
     async function loadAllModules() {
         await createModuleLoader('utils.js');
